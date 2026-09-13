@@ -37,6 +37,24 @@ impl Database {
         }
         Ok(())
     }
+    pub fn upsert_account(&self, account: &Account) -> Result<(), AppError> {
+        self.connection()?.execute(
+            "INSERT INTO accounts(id,provider,handle,display_name,instance_url,did,capabilities_json) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,handle=excluded.handle,display_name=excluded.display_name,instance_url=excluded.instance_url,did=excluded.did,capabilities_json=excluded.capabilities_json",
+            params![account.id,format!("{:?}",account.provider).to_uppercase(),account.handle,account.display_name,account.instance_url,account.did,serde_json::to_string(&account.capabilities).map_err(|e|AppError::Validation(e.to_string()))?],
+        )?;
+        Ok(())
+    }
+    pub fn delete_account(&self, account_id: &str) -> Result<(), AppError> {
+        self.connection()?
+            .execute("DELETE FROM accounts WHERE id=?1", [account_id])?;
+        Ok(())
+    }
+    pub fn replace_accounts(&self, accounts: &[Account]) -> Result<(), AppError> {
+        {
+            self.connection()?.execute("DELETE FROM accounts", [])?;
+        }
+        self.seed(accounts)
+    }
     pub fn accounts(&self) -> Result<Vec<Account>, AppError> {
         let c = self.connection()?;
         let mut s=c.prepare("SELECT id,provider,handle,display_name,instance_url,did,capabilities_json FROM accounts ORDER BY rowid")?;
