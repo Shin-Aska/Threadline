@@ -5,5 +5,5 @@
   "identifier": "social.threadline.app",
   "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
   "app": { "windows": [{ "title": "Threadline", "width": 1180, "height": 780, "minWidth": 760, "minHeight": 600 }], "security": { "csp": null } },
-  "bundle": { "active": true, "targets": "all", "icon": [] }
+  "bundle": { "active": true, "targets": "all", "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"] }
 }

@@ -55,6 +55,48 @@ impl Database {
         }
         self.seed(accounts)
     }
+    /// Retrieves a list of accounts from the database.
+    ///
+    /// This function connects to the database, executes a query to select all accounts,
+    /// and maps the result rows into a vector of `Account` instances. Each account record
+    /// includes details such as provider type, handle, display name, instance URL, DID,
+    /// and capabilities parsed from a JSON string. The accounts are ordered by their
+    /// insertion row ID in the database.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Vec<Account>)`: A vector containing all the accounts retrieved from the database
+    ///   on success.
+    /// - `Err(AppError)`: An error if there was an issue with the database connection,
+    ///   preparing or executing the query, or parsing the data.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if:
+    ///   - The database connection cannot be established (`self.connection()`).
+    ///   - The SQL query contains a syntax error or cannot be prepared.
+    ///   - The query execution fails.
+    ///   - The field values in the database row cannot be parsed into the corresponding
+    ///     `Account` struct fields (e.g., JSON parsing or type mismatches).
+    ///
+    /// # Example
+    /// ```rust
+    /// let accounts = db.accounts();
+    /// match accounts {
+    ///     Ok(account_list) => {
+    ///         for account in account_list {
+    ///             println!("Account Handle: {}", account.handle);
+    ///         }
+    ///     }
+    ///     Err(err) => eprintln!("Error retrieving accounts: {:?}", err),
+    /// }
+    /// ```
+    ///
+    /// # Dependencies
+    /// This function relies on:
+    /// - The `rusqlite` crate for database operations.
+    /// - The `serde_json` crate for deserializing JSON strings in the `capabilities` field.
+    /// ```
     pub fn accounts(&self) -> Result<Vec<Account>, AppError> {
         let c = self.connection()?;
         let mut s=c.prepare("SELECT id,provider,handle,display_name,instance_url,did,capabilities_json FROM accounts ORDER BY rowid")?;

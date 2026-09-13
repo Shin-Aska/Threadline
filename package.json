@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

@@ -15,6 +15,3 @@ src-tauri/gen/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
-
-# Generated from the text-only fallback in src-tauri/build.rs
-src-tauri/icons/
