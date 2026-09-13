@@ -99,4 +99,7 @@ pub struct PreparedPost {
 #[derive(Debug, Clone)]
 pub struct PublishedPost {
     pub remote_id: String,
+    pub remote_cid: Option<String>,
+    pub root_id: Option<String>,
+    pub root_cid: Option<String>,
 }

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Account, CanonicalPost, PublishResult, PublishingPreview } from "../../types";
 export interface DesktopApi {
-  accounts: { list(): Promise<Account[]> };
+  accounts: { list(): Promise<Account[]>; connectBluesky(serviceUrl: string, identifier: string, appPassword: string): Promise<Account>; connectMastodon(baseUrl: string, accessToken: string): Promise<Account>; remove(accountId: string): Promise<void> };
   social: { preview(post: CanonicalPost): Promise<PublishingPreview>; publish(post: CanonicalPost): Promise<PublishResult> };
   storage: { health(): Promise<string> };
   notifications: { list(): Promise<readonly never[]> };
@@ -14,7 +14,12 @@ const mockAccounts: Account[] = [
 ];
 const unavailable = (): never => { throw new Error("Native preview is available in the Tauri desktop application. Run npm run tauri dev."); };
 export const desktopApi: DesktopApi = {
-  accounts: { list: () => runningInTauri() ? invoke<Account[]>("list_accounts") : Promise.resolve(mockAccounts) },
+  accounts: {
+    list: () => runningInTauri() ? invoke<Account[]>("list_accounts") : Promise.resolve(mockAccounts),
+    connectBluesky: (serviceUrl, identifier, appPassword) => runningInTauri() ? invoke<Account>("connect_bluesky", { serviceUrl, identifier, appPassword }) : Promise.reject(unavailable()),
+    connectMastodon: (baseUrl, accessToken) => runningInTauri() ? invoke<Account>("connect_mastodon", { baseUrl, accessToken }) : Promise.reject(unavailable()),
+    remove: (accountId) => runningInTauri() ? invoke<void>("remove_account", { accountId }) : Promise.reject(unavailable()),
+  },
   social: { preview: (post) => runningInTauri() ? invoke("preview_post", { post }) : Promise.reject(unavailable()), publish: (post) => runningInTauri() ? invoke("publish_post", { post }) : Promise.reject(unavailable()) },
   storage: { health: () => runningInTauri() ? invoke("storage_health") : Promise.resolve("browser preview") },
   notifications: { list: () => Promise.resolve([]) }
