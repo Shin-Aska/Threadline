@@ -10,7 +10,7 @@ target/
 .idea/
 .vscode/
 src-tauri/gen/
-
+.omo/
 
 *.tsbuildinfo
 vite.config.js
