@@ -75,6 +75,9 @@ fn capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapabilities 
 /// Loads opt-in live accounts without ever persisting or logging their secrets.
 /// Both the prefixed names and common CI secret names are accepted.
 pub fn live_accounts() -> (Vec<Account>, ProviderMap) {
+    live_accounts_with(value)
+}
+fn live_accounts_with(value: impl Fn(&[&str]) -> Option<String>) -> (Vec<Account>, ProviderMap) {
     let client = reqwest::Client::builder()
         .user_agent(concat!("Threadline/", env!("CARGO_PKG_VERSION")))
         .build()
@@ -91,13 +94,14 @@ pub fn live_accounts() -> (Vec<Account>, ProviderMap) {
     if let (Some(handle), Some(app_password)) = (bsky_handle, bsky_password) {
         let id = "bsky-env".to_owned();
         let caps = capabilities(300, false);
+        let service_url = value(&["THREADLINE_BSKY_SERVICE", "BSKY_SERVICE"])
+            .unwrap_or_else(|| "https://bsky.social".into());
         providers.insert(
             id.clone(),
             Arc::new(BlueskyProvider {
                 capabilities: caps.clone(),
                 client: client.clone(),
-                service_url: value(&["THREADLINE_BSKY_SERVICE", "BSKY_SERVICE"])
-                    .unwrap_or_else(|| "https://bsky.social".into()),
+                service_url: service_url.clone(),
                 identifier: handle.clone(),
                 app_password,
             }),
@@ -107,7 +111,7 @@ pub fn live_accounts() -> (Vec<Account>, ProviderMap) {
             provider: ProviderKind::Bluesky,
             handle: handle.clone(),
             display_name: handle,
-            instance_url: None,
+            instance_url: Some(service_url),
             did: None,
             capabilities: caps,
         });
@@ -154,4 +158,30 @@ pub fn live_accounts() -> (Vec<Account>, ProviderMap) {
         });
     }
     (accounts, providers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn custom_environment_service_is_retained_in_public_account_metadata() {
+        // Given explicit environment settings without changing process-global variables.
+        let settings = HashMap::from([
+            ("THREADLINE_BSKY_HANDLE", "custom.test"),
+            ("THREADLINE_BSKY_APP_PASSWORD", "test-password"),
+            ("THREADLINE_BSKY_SERVICE", "https://custom.example"),
+        ]);
+        // When environment account metadata is created.
+        let (accounts, _) = live_accounts_with(|names| {
+            names
+                .iter()
+                .find_map(|name| settings.get(name).map(|value| (*value).to_owned()))
+        });
+        // Then reconnect can use the same custom endpoint.
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(
+            accounts[0].instance_url.as_deref(),
+            Some("https://custom.example")
+        );
+    }
 }

@@ -33,6 +33,19 @@ pub struct Account {
     pub did: Option<String>,
     pub capabilities: PlatformCapabilities,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum WorkspaceMode {
+    Live,
+    Disconnected,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceState {
+    pub accounts: Vec<Account>,
+    pub connected_account_ids: Vec<String>,
+    pub mode: WorkspaceMode,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PublishingPolicy {
@@ -89,7 +102,6 @@ pub struct Publication {
 #[serde(rename_all = "camelCase")]
 pub struct PublishResult {
     pub canonical_id: String,
-    pub simulated: bool,
     pub publications: Vec<Publication>,
 }
 #[derive(Debug, Clone)]

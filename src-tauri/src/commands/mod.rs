@@ -20,25 +20,28 @@ pub async fn publish_post(
     post: CanonicalPost,
     state: State<'_, AppState>,
 ) -> Result<PublishResult, AppError> {
-    let p = composer::preview(&post, &state.database.accounts()?)?;
+    publish_to_accounts(post, &state).await
+}
+
+pub async fn publish_to_accounts(
+    post: CanonicalPost,
+    state: &AppState,
+) -> Result<PublishResult, AppError> {
+    let workspace = crate::workspace::snapshot(state)?;
+    let p = composer::preview(&post, &workspace.accounts)?;
     let providers = state
         .providers
         .read()
         .map_err(|_| AppError::StateUnavailable)?
         .clone();
-    let simulated = providers.is_empty();
     let mut publications = Vec::with_capacity(p.destinations.len());
     for destination in p.destinations {
         let Some(provider) = providers.get(&destination.account_id) else {
-            publications.push(if simulated {
-                simulated_publication(destination.account_id, &destination.parts)
-            } else {
-                Publication {
-                    account_id: destination.account_id,
-                    status: PublicationStatus::Failed,
-                    remote_post_ids: Vec::new(),
-                    error: Some("Account is not connected; reconnect it in Accounts".into()),
-                }
+            publications.push(Publication {
+                account_id: destination.account_id,
+                status: PublicationStatus::Failed,
+                remote_post_ids: Vec::new(),
+                error: Some("Account is not connected; reconnect it in Accounts".into()),
             });
             continue;
         };
@@ -53,7 +56,6 @@ pub async fn publish_post(
     }
     Ok(PublishResult {
         canonical_id: Uuid::new_v4().to_string(),
-        simulated,
         publications,
     })
 }
@@ -91,6 +93,14 @@ pub async fn connect_bluesky(
     app_password: String,
     state: State<'_, AppState>,
 ) -> Result<Account, AppError> {
+    connect_bluesky_account(service_url, identifier, app_password, &state).await
+}
+async fn connect_bluesky_account(
+    service_url: String,
+    identifier: String,
+    app_password: String,
+    state: &AppState,
+) -> Result<Account, AppError> {
     if identifier.trim().is_empty() || app_password.trim().is_empty() {
         return Err(AppError::Validation(
             "Bluesky handle and app password are required".into(),
@@ -109,7 +119,7 @@ pub async fn connect_bluesky(
         provider: ProviderKind::Bluesky,
         handle: handle.clone(),
         display_name: handle,
-        instance_url: None,
+        instance_url: Some(provider.service_url.clone()),
         did: Some(did),
         capabilities: provider.capabilities.clone(),
     };
@@ -120,7 +130,7 @@ pub async fn connect_bluesky(
     })
     .map_err(|error| AppError::Credential(error.to_string()))?;
     state.credentials.set(&account.id, &credential)?;
-    remove_mock_accounts(&state)?;
+    remove_mock_accounts(state)?;
     state.database.upsert_account(&account)?;
     state
         .providers
@@ -185,19 +195,6 @@ pub fn remove_account(account_id: String, state: State<'_, AppState>) -> Result<
     Ok(())
 }
 
-fn simulated_publication(account_id: String, parts: &[String]) -> Publication {
-    Publication {
-        account_id,
-        status: PublicationStatus::Published,
-        remote_post_ids: parts
-            .iter()
-            .enumerate()
-            .map(|(index, _)| format!("simulated:{}", index + 1))
-            .collect(),
-        error: None,
-    }
-}
-
 async fn publish_destination(
     account_id: String,
     parts: &[String],
@@ -237,3 +234,6 @@ async fn publish_destination(
 pub fn storage_health() -> String {
     "SQLite ready; credentials delegated to OS keychain".into()
 }
+
+#[cfg(test)]
+mod tests;
