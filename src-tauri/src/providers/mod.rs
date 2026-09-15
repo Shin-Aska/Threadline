@@ -7,6 +7,14 @@ use crate::{
 use async_trait::async_trait;
 #[async_trait]
 pub trait SocialProvider: Send + Sync {
+    async fn hashtags(
+        &self,
+        _query: &str,
+    ) -> Result<Vec<crate::hashtags::HashtagSuggestion>, AppError> {
+        Err(AppError::Provider(
+            "Hashtag lookup is unavailable for this provider".into(),
+        ))
+    }
     async fn capabilities(&self) -> Result<PlatformCapabilities, AppError>;
     async fn publish(&self, post: PreparedPost) -> Result<PublishedPost, AppError>;
     async fn reply(
@@ -89,3 +97,11 @@ mod tests {
         assert!(timestamp.ends_with('Z'));
     }
 }
+
+#[cfg(test)]
+mod media_tests;
+
+#[cfg(test)]
+mod hashtag_tests;
+#[cfg(test)]
+mod test_http;

@@ -1,3 +1,5 @@
+mod hashtags;
+mod media;
 use crate::{error::AppError, models::*, providers::SocialProvider};
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -67,7 +69,9 @@ impl MastodonProvider {
         post: PreparedPost,
         in_reply_to_id: Option<&str>,
     ) -> Result<PublishedPost, AppError> {
+        let media_ids = self.upload_images(&post.media).await?;
         let mut form = vec![("status", post.text)];
+        form.extend(media_ids.into_iter().map(|id| ("media_ids[]", id)));
         if let Some(parent) = in_reply_to_id {
             form.push(("in_reply_to_id", parent.to_owned()));
         }
@@ -78,6 +82,7 @@ impl MastodonProvider {
                 self.base_url.trim_end_matches('/')
             ))
             .bearer_auth(&self.access_token)
+            .timeout(std::time::Duration::from_secs(60))
             .header("Idempotency-Key", uuid::Uuid::new_v4().to_string())
             .form(&form)
             .send()
@@ -105,6 +110,12 @@ impl MastodonProvider {
 }
 #[async_trait]
 impl SocialProvider for MastodonProvider {
+    async fn hashtags(
+        &self,
+        query: &str,
+    ) -> Result<Vec<crate::hashtags::HashtagSuggestion>, AppError> {
+        self.search_hashtags(query).await
+    }
     async fn capabilities(&self) -> Result<PlatformCapabilities, AppError> {
         Ok(self.capabilities.clone())
     }
@@ -158,6 +169,7 @@ mod tests {
         let published = provider
             .publish(PreparedPost {
                 text: "hello".into(),
+                media: vec![],
             })
             .await
             .expect("publish");

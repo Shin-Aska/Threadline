@@ -1,3 +1,4 @@
+mod account_identity;
 use crate::providers::SocialProvider;
 use crate::providers::{bluesky::BlueskyProvider, mastodon::MastodonProvider};
 use crate::{composer, error::AppError, models::*, AppState};
@@ -29,6 +30,7 @@ pub async fn publish_to_accounts(
 ) -> Result<PublishResult, AppError> {
     let workspace = crate::workspace::snapshot(state)?;
     let p = composer::preview(&post, &workspace.accounts)?;
+    let media = crate::media::prepare(&post.media)?;
     let providers = state
         .providers
         .read()
@@ -49,6 +51,7 @@ pub async fn publish_to_accounts(
             publish_destination(
                 destination.account_id,
                 &destination.parts,
+                &media,
                 provider.as_ref(),
             )
             .await,
@@ -66,7 +69,12 @@ fn default_capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapab
         counting_policy: CountingPolicy::Grapheme,
         reserved_url_length: mastodon.then_some(23),
         max_media_attachments: 4,
-        supported_media_types: vec!["image/jpeg".into(), "image/png".into(), "video/mp4".into()],
+        supported_media_types: vec![
+            "image/jpeg".into(),
+            "image/png".into(),
+            "image/webp".into(),
+            "video/mp4".into(),
+        ],
         supports_polls: mastodon,
         supports_content_warnings: mastodon,
     }
@@ -107,6 +115,7 @@ async fn connect_bluesky_account(
         ));
     }
     let provider = BlueskyProvider {
+        search_session: Default::default(),
         capabilities: default_capabilities(300, false),
         client: reqwest::Client::new(),
         service_url,
@@ -159,7 +168,11 @@ pub async fn connect_mastodon(
     };
     let (remote_id, handle, display_name) = provider.account().await?;
     let account = Account {
-        id: format!("mastodon-{remote_id}"),
+        id: account_identity::mastodon_account_id(
+            &provider.base_url,
+            &remote_id,
+            &state.database.accounts()?,
+        )?,
         provider: ProviderKind::Mastodon,
         handle,
         display_name,
@@ -198,12 +211,20 @@ pub fn remove_account(account_id: String, state: State<'_, AppState>) -> Result<
 async fn publish_destination(
     account_id: String,
     parts: &[String],
+    media: &[PreparedMedia],
     provider: &dyn SocialProvider,
 ) -> Publication {
     let mut published = Vec::new();
     let mut parent = None;
-    for text in parts {
-        let post = PreparedPost { text: text.clone() };
+    for (index, text) in parts.iter().enumerate() {
+        let post = PreparedPost {
+            text: text.clone(),
+            media: if index == 0 {
+                media.to_vec()
+            } else {
+                Vec::new()
+            },
+        };
         let result = match parent.as_ref() {
             Some(parent) => provider.reply(parent, post).await,
             None => provider.publish(post).await,
@@ -237,3 +258,6 @@ pub fn storage_health() -> String {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod media_tests;

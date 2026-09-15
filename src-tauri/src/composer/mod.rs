@@ -124,6 +124,7 @@ pub fn preview(post: &CanonicalPost, accounts: &[Account]) -> Result<PublishingP
                 .ok_or_else(|| AppError::AccountNotFound(id.clone()))
         })
         .collect::<Result<_, _>>()?;
+    crate::media::validate(&post.media, &selected)?;
     let min = selected
         .iter()
         .min_by_key(|a| a.capabilities.max_text_length)
@@ -140,7 +141,11 @@ pub fn preview(post: &CanonicalPost, accounts: &[Account]) -> Result<PublishingP
                 account_id: a.id.clone(),
                 label: a.instance_url.clone().unwrap_or_else(|| "Bluesky".into()),
                 max_length: a.capabilities.max_text_length,
-                parts: split_thread(&post.text, limit, &NumberingFormat::default(), force)?,
+                parts: if post.text.trim().is_empty() && !post.media.is_empty() {
+                    vec![String::new()]
+                } else {
+                    split_thread(&post.text, limit, &NumberingFormat::default(), force)?
+                },
             })
         })
         .collect::<Result<_, AppError>>()?;

@@ -6,6 +6,8 @@ pub mod config;
 pub mod credentials;
 pub mod database;
 pub mod error;
+pub mod hashtags;
+pub mod media;
 pub mod models;
 pub mod providers;
 pub mod workspace;
@@ -42,6 +44,7 @@ pub fn run() {
             commands::list_accounts,
             workspace::get_workspace,
             commands::preview_post,
+            hashtags::lookup_hashtags,
             commands::publish_post,
             commands::connect_bluesky,
             commands::connect_mastodon,

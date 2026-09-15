@@ -36,6 +36,7 @@ pub fn provider_from_credential(
             identifier,
             app_password,
         } => Some(Arc::new(BlueskyProvider {
+            search_session: Default::default(),
             capabilities: account.capabilities.clone(),
             client,
             service_url,
@@ -66,7 +67,12 @@ fn capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapabilities 
         counting_policy: CountingPolicy::Grapheme,
         reserved_url_length: mastodon.then_some(23),
         max_media_attachments: 4,
-        supported_media_types: vec!["image/jpeg".into(), "image/png".into(), "video/mp4".into()],
+        supported_media_types: vec![
+            "image/jpeg".into(),
+            "image/png".into(),
+            "image/webp".into(),
+            "video/mp4".into(),
+        ],
         supports_polls: mastodon,
         supports_content_warnings: mastodon,
     }
@@ -99,6 +105,7 @@ fn live_accounts_with(value: impl Fn(&[&str]) -> Option<String>) -> (Vec<Account
         providers.insert(
             id.clone(),
             Arc::new(BlueskyProvider {
+                search_session: Default::default(),
                 capabilities: caps.clone(),
                 client: client.clone(),
                 service_url: service_url.clone(),

@@ -57,8 +57,11 @@ pub enum PublishingPolicy {
 #[serde(rename_all = "camelCase")]
 pub struct MediaAttachment {
     pub id: String,
-    pub kind: String,
-    pub alt_text: Option<String>,
+    pub mime_type: String,
+    pub size_bytes: usize,
+    pub alt_text: String,
+    #[serde(default)]
+    pub data_base64: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +110,13 @@ pub struct PublishResult {
 #[derive(Debug, Clone)]
 pub struct PreparedPost {
     pub text: String,
+    pub media: Vec<PreparedMedia>,
+}
+#[derive(Debug, Clone)]
+pub struct PreparedMedia {
+    pub mime_type: String,
+    pub data: std::sync::Arc<[u8]>,
+    pub alt_text: String,
 }
 #[derive(Debug, Clone)]
 pub struct PublishedPost {

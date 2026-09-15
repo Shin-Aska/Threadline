@@ -1,7 +1,10 @@
+mod facets;
+mod hashtags;
 use crate::{error::AppError, models::*, providers::SocialProvider};
 use async_trait::async_trait;
 use serde::Deserialize;
 pub struct BlueskyProvider {
+    pub search_session: tokio::sync::Mutex<Option<hashtags::SearchSession>>,
     pub capabilities: PlatformCapabilities,
     pub client: reqwest::Client,
     pub service_url: String,
@@ -45,6 +48,7 @@ impl BlueskyProvider {
         body: serde_json::Value,
     ) -> Result<T, AppError> {
         let response = request
+            .timeout(std::time::Duration::from_secs(60))
             .json(&body)
             .send()
             .await
@@ -74,6 +78,47 @@ impl BlueskyProvider {
             "text": post.text,
             "createdAt": crate::providers::now_iso8601(),
         });
+        let facets = facets::hashtags(&post.text)?;
+        if !facets.is_empty() {
+            record["facets"] = serde_json::to_value(facets)
+                .map_err(|error| AppError::Provider(format!("Invalid hashtag facets: {error}")))?;
+        }
+        if !post.media.is_empty() {
+            let mut images = Vec::with_capacity(post.media.len());
+            for image in &post.media {
+                let response = self
+                    .client
+                    .post(format!(
+                        "{}/xrpc/com.atproto.repo.uploadBlob",
+                        self.service_url.trim_end_matches('/')
+                    ))
+                    .bearer_auth(&session.access_jwt)
+                    .header(reqwest::header::CONTENT_TYPE, &image.mime_type)
+                    .timeout(std::time::Duration::from_secs(60))
+                    .body(image.data.to_vec())
+                    .send()
+                    .await
+                    .map_err(|error| {
+                        AppError::Provider(format!("Bluesky image upload failed: {error}"))
+                    })?;
+                if !response.status().is_success() {
+                    return Err(AppError::Provider(format!(
+                        "Bluesky image upload returned {}",
+                        response.status()
+                    )));
+                }
+                #[derive(Deserialize)]
+                struct UploadResponse {
+                    blob: serde_json::Value,
+                }
+                let uploaded: UploadResponse = response.json().await.map_err(|_| {
+                    AppError::Provider("Invalid Bluesky image upload response".into())
+                })?;
+                images.push(serde_json::json!({"alt": image.alt_text, "image": uploaded.blob}));
+            }
+            record["embed"] =
+                serde_json::json!({"$type": "app.bsky.embed.images", "images": images});
+        }
         if let Some(parent) = parent {
             let cid = parent.remote_cid.as_ref().ok_or_else(|| {
                 AppError::Provider("Bluesky reply parent is missing its CID".into())
@@ -114,6 +159,12 @@ impl BlueskyProvider {
 }
 #[async_trait]
 impl SocialProvider for BlueskyProvider {
+    async fn hashtags(
+        &self,
+        query: &str,
+    ) -> Result<Vec<crate::hashtags::HashtagSuggestion>, AppError> {
+        self.search_hashtags(query).await
+    }
     async fn capabilities(&self) -> Result<PlatformCapabilities, AppError> {
         Ok(self.capabilities.clone())
     }
