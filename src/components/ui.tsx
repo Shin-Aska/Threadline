@@ -17,3 +17,10 @@ export function Identity({ account }: { readonly account: Account }) {
 export function Notice({ children, error = false }: { readonly children: React.ReactNode; readonly error?: boolean }) {
   return <div className={`notice ${error ? "notice-error" : ""}`} role={error ? "alert" : "status"}>{children}</div>;
 }
+
+export function AccountStack({ accounts }: { readonly accounts: readonly Account[] }) {
+  return <span className="account-stack" aria-label={accounts.map(account => account.displayName + " · " + account.handle).join(", ")}>
+    {accounts.slice(0, 3).map(account => <span key={account.id} className={"account-initial " + account.provider.toLowerCase()} title={account.displayName + " · " + account.handle}>{[...account.displayName][0] ?? "?"}</span>)}
+    {accounts.length > 3 && <span className="account-overflow">+{accounts.length - 3}</span>}
+  </span>;
+}

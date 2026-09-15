@@ -71,10 +71,10 @@ test("first real connection opens the composer with a selected target and empty 
   await page.getByLabel("App password", { exact: true }).fill("test-only-password");
   await page.getByRole("button", { name: "Connect account" }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
-  await expect(page.locator(".target-tile")).toHaveCount(1);
+  await expect(page.locator(".identity-choice")).toHaveCount(1);
   await expect(page.getByRole("checkbox")).toBeChecked();
   await expect(page.getByRole("radio", { name: /Common limit/i })).toBeChecked();
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeDisabled();
 });
 
 test("failed first connection stays in setup and preserves public details", async ({ page }) => {
@@ -90,9 +90,9 @@ test("failed first connection stays in setup and preserves public details", asyn
 test("failed preview can be retried and prevents premature publication", async ({ page }) => {
   await installDesktop(page, "preview-error"); await draft(page);
   await expect(page.getByText("Planning is temporarily unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeDisabled();
   await page.getByRole("button", { name: "Retry preview" }).click();
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeEnabled();
 });
 
 test("custom service is preserved for reconnect", async ({ page }) => {
@@ -114,29 +114,29 @@ test("legacy identity without a service URL cannot reconnect to a guessed endpoi
 
 test("publication errors survive editing and replanning without losing the draft", async ({ page }) => {
   await installDesktop(page, "publish-error"); await draft(page);
-  await page.getByRole("button", { name: "Publish to 1 selected" }).click();
+  await page.getByRole("button", { name: "Publish to 1 account" }).click();
   await expect(page.getByText("Provider rejected publication", { exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Post text" }).fill("Keep this edited draft after the failure.");
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeEnabled();
   await expect(page.getByText("Provider rejected publication", { exact: true })).toBeVisible();
 });
 
 test("successful publication clears the draft and prevents accidental resubmission", async ({ page }) => {
   await installDesktop(page, "ready"); await draft(page);
-  await page.getByRole("button", { name: "Publish to 1 selected" }).click();
+  await page.getByRole("button", { name: "Publish to 1 account" }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
   await expect(page.locator(".dispatch-bar")).toContainText("Published successfully");
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeDisabled();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-publish-count"))).toBe("1");
   await page.getByRole("textbox", { name: "Post text" }).fill("An intentional new post.");
-  await page.getByRole("button", { name: "Publish to 1 selected" }).click();
+  await page.getByRole("button", { name: "Publish to 1 account" }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-publish-count"))).toBe("2");
 });
 
 test("rapid publish clicks send only once while publication is pending", async ({ page }) => {
   await installDesktop(page, "publish-slow"); await draft(page);
-  const button = page.getByRole("button", { name: "Publish to 1 selected" });
+  const button = page.getByRole("button", { name: "Publish to 1 account" });
   await expect(button).toBeEnabled();
   await button.evaluate(element => { if (!(element instanceof HTMLButtonElement)) throw new Error("Expected publish button"); element.click(); element.click(); });
   await expect(page.getByRole("button", { name: "Publishing…", exact: true })).toBeDisabled();
@@ -148,28 +148,28 @@ test("rapid publish clicks send only once while publication is pending", async (
 
 test("failed publication preserves the draft and reports failure", async ({ page }) => {
   await installDesktop(page, "publish-failed"); await draft(page);
-  await page.getByRole("button", { name: "Publish to 1 selected" }).click();
+  await page.getByRole("button", { name: "Publish to 1 account" }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("A post for the test workspace.");
   await expect(page.locator(".dispatch-bar")).toContainText("Publishing failed");
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeEnabled();
 });
 
 for (const scenario of ["publish-partial", "publish-partial-thread"] as const) test(scenario + " preserves the draft without resending published posts", async ({ page }) => {
   await installDesktop(page, scenario); await draft(page);
-  await page.getByRole("button", { name: "Publish to 2 selected" }).click();
+  await page.getByRole("button", { name: "Publish to 2 accounts" }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("A post for the test workspace.");
   await expect(page.locator(".dispatch-bar")).toContainText("Some posts were published");
   await expect(page.getByRole("checkbox").first()).not.toBeChecked();
   if (scenario === "publish-partial") await expect(page.getByRole("checkbox").nth(1)).toBeChecked();
   else {
     await expect(page.getByRole("checkbox").nth(1)).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "Publish to 0 selected" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Publish to 0 accounts" })).toBeDisabled();
   }
 });
 
 test("reconnecting a selected account requires a refreshed preview before publishing", async ({ page }) => {
   await installDesktop(page, "reconnect-preview"); await draft(page);
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeEnabled();
   await page.getByRole("button", { name: "Accounts & Sync", exact: true }).click();
   await page.getByLabel("Handle", { exact: true }).fill("writer.bsky.social");
   await page.getByLabel("App password", { exact: true }).fill("test-only-password");
@@ -177,9 +177,9 @@ test("reconnecting a selected account requires a refreshed preview before publis
   await expect(page.getByText("writer.bsky.social connected and verified.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^Composer/ }).click();
   await expect(page.getByText("Refreshed planning unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeDisabled();
   await page.getByRole("button", { name: "Retry preview" }).click();
-  await expect(page.getByRole("button", { name: "Publish to 1 selected" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeEnabled();
 });
 
 test("removing the last account returns to setup", async ({ page }) => {

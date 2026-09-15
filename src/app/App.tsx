@@ -22,7 +22,7 @@ export function App() {
     setPage("composer");
     requestAnimationFrame(() => document.getElementById("post-text")?.focus());
   };
-  return <AppShell accounts={workspace.accounts} page={page} mode={workspace.mode} onNavigate={setPage} onCompose={compose}>
+  return <AppShell connectedAccountIds={workspace.connectedAccountIds} refreshing={refreshing || error !== null} accounts={workspace.accounts} page={page} mode={workspace.mode} onNavigate={setPage} onCompose={compose}>
     {workspaceError}
     <div hidden={page !== "composer"}><ComposerPanel workspace={workspace} refreshing={refreshing || error !== null} onAccounts={() => setPage("accounts")} /></div>
     {page === "accounts" && <AccountsPanel workspace={workspace} refreshing={refreshing || error !== null} onConnected={async account => { await refresh(account.id); }} onRemoved={async () => { await refresh(); }} />}
