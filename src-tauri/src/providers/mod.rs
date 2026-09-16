@@ -7,6 +7,30 @@ use crate::{
 use async_trait::async_trait;
 #[async_trait]
 pub trait SocialProvider: Send + Sync {
+    async fn timeline(
+        &self,
+        _account_id: &str,
+        _account_handle: &str,
+        _cursor: Option<&str>,
+    ) -> Result<serde_json::Value, AppError> {
+        Err(AppError::Provider(
+            "Home timeline is unavailable for this provider".into(),
+        ))
+    }
+    async fn discovery(
+        &self,
+        _account_id: &str,
+        _account_handle: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        Err(AppError::Provider(
+            "Discovery is unavailable for this provider".into(),
+        ))
+    }
+    async fn following_sources(&self, _account_id: &str) -> Result<serde_json::Value, AppError> {
+        Err(AppError::Provider(
+            "Followed sources are unavailable for this provider".into(),
+        ))
+    }
     async fn hashtags(
         &self,
         _query: &str,

@@ -159,6 +159,63 @@ impl BlueskyProvider {
 }
 #[async_trait]
 impl SocialProvider for BlueskyProvider {
+    async fn timeline(
+        &self,
+        account_id: &str,
+        account_handle: &str,
+        cursor: Option<&str>,
+    ) -> Result<serde_json::Value, AppError> {
+        let session = self.session().await?;
+        let mut request = self
+            .client
+            .get(format!(
+                "{}/xrpc/app.bsky.feed.getTimeline",
+                self.service_url.trim_end_matches('/')
+            ))
+            .bearer_auth(session.access_jwt)
+            .query(&[("limit", "50")]);
+        if let Some(cursor) = cursor {
+            request = request.query(&[("cursor", cursor)]);
+        }
+        let native: serde_json::Value = request
+            .send()
+            .await
+            .map_err(|error| AppError::Provider(format!("Bluesky timeline failed: {error}")))?
+            .error_for_status()
+            .map_err(|error| AppError::Provider(format!("Bluesky timeline failed: {error}")))?
+            .json()
+            .await
+            .map_err(|error| AppError::Provider(format!("Invalid Bluesky timeline: {error}")))?;
+        let posts = native["feed"].as_array().into_iter().flatten().filter_map(|item| { let post=&item["post"]; let uri=post["uri"].as_str()?; let author=&post["author"]; let record=&post["record"]; let handle=author["handle"].as_str().unwrap_or(""); let rkey=uri.rsplit('/').next().unwrap_or(""); let media=item["post"]["embed"]["images"].as_array().map(|images| images.iter().map(|image| serde_json::json!({"url":image["fullsize"],"alt":image["alt"].as_str().unwrap_or(""),"type":"image"})).collect::<Vec<_>>()).unwrap_or_default(); Some(serde_json::json!({"canonicalKey":format!("BLUESKY:{uri}"),"provider":"BLUESKY","remoteId":uri,"remoteUrl":format!("https://bsky.app/profile/{handle}/post/{rkey}"),"author":{"id":author["did"],"displayName":author["displayName"].as_str().unwrap_or(handle),"handle":handle,"avatarUrl":author["avatar"].as_str()},"text":record["text"].as_str().unwrap_or(""),"createdAt":record["createdAt"].as_str().unwrap_or(""),"media":media,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"BLUESKY"}],"metrics":{"replies":post["replyCount"],"reposts":post["repostCount"],"likes":post["likeCount"]},"capabilities":{"openOriginal":true,"reply":false,"like":false,"repost":false}})) }).collect::<Vec<_>>();
+        Ok(serde_json::json!({"posts":posts,"cursor":native["cursor"].as_str()}))
+    }
+    async fn discovery(
+        &self,
+        _account_id: &str,
+        _account_handle: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        Ok(serde_json::json!({"topics":[],"suggestedAccounts":[],"popularPosts":[]}))
+    }
+    async fn following_sources(&self, account_id: &str) -> Result<serde_json::Value, AppError> {
+        let session = self.session().await?;
+        let value: serde_json::Value = self
+            .client
+            .get(format!(
+                "{}/xrpc/app.bsky.actor.getPreferences",
+                self.service_url.trim_end_matches('/')
+            ))
+            .bearer_auth(session.access_jwt)
+            .send()
+            .await
+            .map_err(|e| AppError::Provider(format!("Bluesky preferences failed: {e}")))?
+            .error_for_status()
+            .map_err(|e| AppError::Provider(format!("Bluesky preferences failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| AppError::Provider(format!("Invalid Bluesky preferences: {e}")))?;
+        let sources=value["preferences"].as_array().into_iter().flatten().filter(|p|p["$type"]=="app.bsky.actor.defs#savedFeedsPrefV2").flat_map(|p|p["items"].as_array().into_iter().flatten()).filter(|i|i["type"]=="feed"&&i["pinned"].as_bool().unwrap_or(false)).filter_map(|i|i["value"].as_str()).map(|uri|serde_json::json!({"id":format!("BLUESKY:{uri}"),"provider":"BLUESKY","type":"FEED","title":uri.rsplit('/').next().unwrap_or("Saved feed"),"description":"Saved Bluesky feed","accountId":account_id,"remoteId":uri})).collect::<Vec<_>>();
+        Ok(serde_json::json!(sources))
+    }
     async fn hashtags(
         &self,
         query: &str,

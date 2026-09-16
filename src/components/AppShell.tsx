@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Feather, Plus, ShieldCheck } from "lucide-react";
+import { ArrowLeftRight, Compass, Feather, Home, Plus, ShieldCheck, Users } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Account, WorkspaceMode } from "../types";
@@ -6,7 +6,7 @@ import { useComposerStore } from "../stores/composer";
 import { ProviderIcon } from "./ui";
 import { providerNames } from "./providers";
 
-export type Page = "composer" | "accounts";
+export type Page = "composer" | "timeline" | "discover" | "following" | "accounts";
 interface ShellProps {
   readonly accounts: readonly Account[];
   readonly connectedAccountIds: readonly string[];
@@ -36,6 +36,9 @@ export function AppShell({ accounts, connectedAccountIds, refreshing, page, mode
       </div>
       <nav aria-label="Main navigation">
         <button className={page === "composer" ? "nav-item active" : "nav-item"} aria-current={page === "composer" ? "page" : undefined} onClick={() => onNavigate("composer")} title="Composer"><Feather size={18} /><span>Composer</span></button>
+        <button className={page === "timeline" ? "nav-item active" : "nav-item"} aria-current={page === "timeline" ? "page" : undefined} onClick={() => onNavigate("timeline")} title="Timeline"><Home size={18} /><span>Timeline</span></button>
+        <button className={page === "discover" ? "nav-item active" : "nav-item"} aria-current={page === "discover" ? "page" : undefined} onClick={() => onNavigate("discover")} title="Discover"><Compass size={18} /><span>Discover</span></button>
+        <button className={page === "following" ? "nav-item active" : "nav-item"} aria-current={page === "following" ? "page" : undefined} onClick={() => onNavigate("following")} title="Following"><Users size={18} /><span>Following</span></button>
         <button className={page === "accounts" ? "nav-item active" : "nav-item"} aria-current={page === "accounts" ? "page" : undefined} onClick={() => onNavigate("accounts")} title="Accounts & Sync"><ArrowLeftRight size={18} /><span>Accounts & Sync</span></button>
       </nav>
       <div className="sidebar-bottom"><div className="local-note"><ShieldCheck size={18} /><div><strong>Your accounts. Your control.</strong><p>Credentials are kept in your system’s secure credential store.</p></div></div><span className="version">THREADLINE / 0.1.0</span></div>
