@@ -20,8 +20,29 @@ pub struct AppState {
     pub providers: RwLock<config::ProviderMap>,
     pub credentials: Arc<dyn CredentialStore>,
 }
+#[cfg(all(target_os = "linux", debug_assertions))]
+fn configure_linux_webkit() {
+    // WebKitGTK can create a healthy WebView that never paints when the Linux
+    // display exposes only a software GL renderer. Development builds prefer
+    // the reliable software paint path so `tauri dev` remains usable there.
+    std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+}
+#[cfg(all(test, target_os = "linux", debug_assertions))]
+mod startup_tests {
+    #[test]
+    fn linux_dev_startup_disables_webkit_compositing() {
+        super::configure_linux_webkit();
+        assert_eq!(
+            std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").as_deref(),
+            Ok("1")
+        );
+    }
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(all(target_os = "linux", debug_assertions))]
+    configure_linux_webkit();
+
     tauri::Builder::default()
         .setup(|app| {
             use tauri::Manager;
