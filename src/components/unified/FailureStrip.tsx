@@ -1,0 +1,3 @@
+import { AlertTriangle, RotateCw } from "lucide-react";
+import type { Account, ProviderFailure } from "../../types";
+export function FailureStrip({ failures, accounts, retry }: { failures: readonly ProviderFailure[]; accounts: readonly Account[]; retry: () => void }) { if (!failures.length) return null; return <div className="failure-strip" role="status"><AlertTriangle size={16} /><span>{failures.map(failure => `${accounts.find(account => account.id === failure.accountId)?.displayName ?? failure.provider}: ${failure.authExpired ? "authentication expired" : failure.message}`).join(" · ")}</span><button className="button button-link" onClick={retry}><RotateCw size={13} />Retry</button></div>; }

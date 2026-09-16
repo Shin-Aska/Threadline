@@ -1,4 +1,5 @@
 mod account_identity;
+pub mod browsing;
 use crate::providers::SocialProvider;
 use crate::providers::{bluesky::BlueskyProvider, mastodon::MastodonProvider};
 use crate::{composer, error::AppError, models::*, AppState};

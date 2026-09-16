@@ -110,6 +110,84 @@ impl MastodonProvider {
 }
 #[async_trait]
 impl SocialProvider for MastodonProvider {
+    async fn timeline(
+        &self,
+        account_id: &str,
+        account_handle: &str,
+        cursor: Option<&str>,
+    ) -> Result<serde_json::Value, AppError> {
+        let mut req = self
+            .client
+            .get(format!(
+                "{}/api/v1/timelines/home",
+                self.base_url.trim_end_matches('/')
+            ))
+            .bearer_auth(&self.access_token)
+            .query(&[("limit", "40")]);
+        if let Some(max_id) = cursor {
+            req = req.query(&[("max_id", max_id)]);
+        }
+        let response = req
+            .send()
+            .await
+            .map_err(|e| AppError::Provider(format!("Mastodon timeline failed: {e}")))?
+            .error_for_status()
+            .map_err(|e| AppError::Provider(format!("Mastodon timeline failed: {e}")))?;
+        let items: Vec<serde_json::Value> = response
+            .json()
+            .await
+            .map_err(|e| AppError::Provider(format!("Invalid Mastodon timeline: {e}")))?;
+        let cleaner =
+            regex::Regex::new("<[^>]+>").map_err(|e| AppError::Provider(e.to_string()))?;
+        let posts=items.iter().filter_map(|wrapper| {let p=wrapper.get("reblog").filter(|v|!v.is_null()).unwrap_or(wrapper);let id=p["id"].as_str()?;let actor=&p["account"];let content=cleaner.replace_all(p["content"].as_str().unwrap_or(""),"").to_string();let media=p["media_attachments"].as_array().into_iter().flatten().filter_map(|m|Some(serde_json::json!({"url":m["url"].as_str()?,"alt":m["description"].as_str().unwrap_or(""),"type":m["type"].as_str().unwrap_or("image")}))).collect::<Vec<_>>();Some(serde_json::json!({"canonicalKey":format!("MASTODON:{}:{id}",self.base_url),"provider":"MASTODON","remoteId":id,"remoteUrl":p["url"].as_str().unwrap_or(""),"author":{"id":actor["id"],"displayName":actor["display_name"].as_str().filter(|v|!v.is_empty()).unwrap_or(actor["acct"].as_str().unwrap_or("")),"handle":actor["acct"].as_str().unwrap_or(""),"avatarUrl":actor["avatar"].as_str()},"text":content,"createdAt":p["created_at"].as_str().unwrap_or(""),"media":media,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"MASTODON"}],"metrics":{"replies":p["replies_count"],"reposts":p["reblogs_count"],"likes":p["favourites_count"]},"capabilities":{"openOriginal":true,"reply":false,"like":false,"repost":false}}))}).collect::<Vec<_>>();
+        let cursor = items
+            .last()
+            .and_then(|v| v.get("id"))
+            .and_then(|v| v.as_str());
+        Ok(serde_json::json!({"posts":posts,"cursor":cursor}))
+    }
+    async fn discovery(
+        &self,
+        account_id: &str,
+        account_handle: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        let tags: Vec<serde_json::Value> = self
+            .client
+            .get(format!(
+                "{}/api/v1/trends/tags",
+                self.base_url.trim_end_matches('/')
+            ))
+            .bearer_auth(&self.access_token)
+            .query(&[("limit", "20")])
+            .send()
+            .await
+            .map_err(|e| AppError::Provider(format!("Mastodon trends failed: {e}")))?
+            .error_for_status()
+            .map_err(|e| AppError::Provider(format!("Mastodon trends failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| AppError::Provider(format!("Invalid Mastodon trends: {e}")))?;
+        let topics=tags.into_iter().filter_map(|t|{let name=t["name"].as_str()?;let history=t["history"].as_array().map(|h|h.iter().filter_map(|x|x["uses"].as_str()?.parse::<u64>().ok()).collect::<Vec<_>>()).unwrap_or_default();let count=history.iter().sum::<u64>();Some(serde_json::json!({"key":name.to_lowercase(),"name":name,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"MASTODON"}],"postCount":count,"history":history}))}).collect::<Vec<_>>();
+        Ok(serde_json::json!({"topics":topics,"suggestedAccounts":[],"popularPosts":[]}))
+    }
+    async fn following_sources(&self, account_id: &str) -> Result<serde_json::Value, AppError> {
+        let tags: Vec<serde_json::Value> = self
+            .client
+            .get(format!(
+                "{}/api/v1/followed_tags",
+                self.base_url.trim_end_matches('/')
+            ))
+            .bearer_auth(&self.access_token)
+            .send()
+            .await
+            .map_err(|e| AppError::Provider(format!("Mastodon followed tags failed: {e}")))?
+            .error_for_status()
+            .map_err(|e| AppError::Provider(format!("Mastodon followed tags failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| AppError::Provider(format!("Invalid Mastodon followed tags: {e}")))?;
+        Ok(serde_json::json!(tags.into_iter().filter_map(|t|{let name=t["name"].as_str()?;Some(serde_json::json!({"id":format!("MASTODON:{}:{name}",self.base_url),"provider":"MASTODON","type":"TOPIC","title":format!("#{name}"),"description":"Followed Mastodon hashtag","accountId":account_id,"remoteId":name}))}).collect::<Vec<_>>()))
+    }
     async fn hashtags(
         &self,
         query: &str,

@@ -70,7 +70,10 @@ pub fn run() {
             commands::connect_bluesky,
             commands::connect_mastodon,
             commands::remove_account,
-            commands::storage_health
+            commands::storage_health,
+            commands::browsing::get_timeline,
+            commands::browsing::get_discovery,
+            commands::browsing::get_following_sources
         ])
         .run(tauri::generate_context!())
         .expect("error while running Threadline")
