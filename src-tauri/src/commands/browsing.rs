@@ -1,8 +1,8 @@
 use crate::{error::AppError, AppState};
 use tauri::State;
-fn provider_and_account<'a>(
+fn provider_and_account(
     account_id: &str,
-    state: &'a AppState,
+    state: &AppState,
 ) -> Result<
     (
         std::sync::Arc<dyn crate::providers::SocialProvider>,
