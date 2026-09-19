@@ -54,6 +54,7 @@ Drafts and publication results are not saved across restarts. There is no schedu
 Built with **Tauri 2 · Rust · React 19 · TypeScript · SQLite**.
 
 - [Development setup and checks](docs/development.md)
+- [Releases and download verification](docs/releases.md)
 - [How the codebase works](docs/architecture.md)
 - [Publishing, thread planning, and retries](docs/publishing.md)
 - [Provider support and extension points](docs/providers.md)
