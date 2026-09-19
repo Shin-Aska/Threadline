@@ -1,4 +1,4 @@
-import { Eye, GitBranch, ShieldCheck } from "lucide-react";
+import { Eye, GitBranch } from "lucide-react";
 import type { Account, MediaAttachment, PublishingPreview } from "../types";
 import { Identity, ProviderIcon } from "./ui";
 import { providerNames } from "./providers";
@@ -10,8 +10,8 @@ interface PreviewProps {
   readonly native: boolean;
 }
 export function DestinationPreview({ accounts, preview, text, media, native }: PreviewProps) {
-  return <div className="preview-column"><section className="panel preview-panel" aria-labelledby="preview-heading"><div className="panel-heading"><h2 id="preview-heading"><Eye size={18} />Protocol Previews</h2><span className="badge">{preview ? "Native" : "Draft"}</span></div>
-    {!accounts.length && <div className="empty-state"><Eye size={24} /><h3>Select a destination</h3><p>Select identities in the sidebar to preview your post.</p></div>}
+  return <aside className="preview-column"><section className="panel preview-panel" aria-labelledby="preview-heading"><header className="preview-heading"><h2 id="preview-heading">Live preview</h2><p>Here’s how your post will look on each network.</p></header>
+    {!accounts.length && <div className="empty-state"><Eye size={24} /><h3>Select a destination</h3><p>Use Add more to choose an account for this post.</p></div>}
     {(["BLUESKY", "MASTODON"] as const).map(provider => {
       const identities = accounts.filter(account => account.provider === provider);
       if (!identities.length) return null;
@@ -33,5 +33,5 @@ export function DestinationPreview({ accounts, preview, text, media, native }: P
         </div>)}
       </section>;
     })}
-  </section><div className="vault-note"><ShieldCheck size={21} /><div><h3>{native ? "One source. Native threads." : "A preview of your next post"}</h3><p>{native ? "Threadline adapts your post to each account’s limits using the selected publishing policy." : "Thread splitting and publishing run in the desktop app."}</p></div></div></div>;
+  </section><p className="preview-help">{native ? "Your post adapts to each network using the selected publishing policy." : "Thread splitting and publishing run in the desktop app."}</p></aside>;
 }

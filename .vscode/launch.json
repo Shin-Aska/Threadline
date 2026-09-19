@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tauri: Dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run tauri:dev",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Tauri: Debug Rust Core",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path=./src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "threadline",
+          "kind": "bin"
+        }
+      },
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "ui:dev"
+    },
+    {
+      "name": "Frontend: Browser Preview",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:1420",
+      "webRoot": "${workspaceFolder}/src",
+      "preLaunchTask": "ui:dev"
+    }
+  ]
+}

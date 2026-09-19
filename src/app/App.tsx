@@ -10,7 +10,7 @@ import { Notice } from "../components/ui";
 import { useWorkspace } from "../hooks/useWorkspace";
 
 export function App() {
-  const [page, setPage] = useState<Page>("composer");
+  const [page, setPage] = useState<Page>("timeline");
   const { workspace, error, refreshing, refresh } = useWorkspace();
   const needsSetup = workspace?.accounts.length === 0;
   useEffect(() => { document.title = `${needsSetup || !workspace ? "Account setup" : ({ composer: "Composer", timeline: "Timeline", discover: "Discover", following: "Following", accounts: "Accounts & Sync" } as const)[page]} · Threadline`; }, [page, needsSetup, workspace]);
@@ -19,13 +19,13 @@ export function App() {
     <header className="setup-brand"><img src={new URL("../assets/threadline-logo.svg", import.meta.url).href} width={32} height={32} alt="" /><strong>Threadline</strong></header>
     {workspaceError}
     {!workspace && !error && <Notice>Loading your workspace…</Notice>}
-    {workspace && <AccountsPanel setup workspace={workspace} refreshing={refreshing || error !== null} onConnected={async account => { if (await refresh(account.id)) setPage("composer"); }} onRemoved={async () => { await refresh(); }} />}
+    {workspace && <AccountsPanel setup workspace={workspace} refreshing={refreshing || error !== null} onConnected={async account => { if (await refresh(account.id)) setPage("timeline"); }} onRemoved={async () => { await refresh(); }} />}
   </main>;
   const compose = () => {
     setPage("composer");
     requestAnimationFrame(() => document.getElementById("post-text")?.focus());
   };
-  return <AppShell connectedAccountIds={workspace.connectedAccountIds} refreshing={refreshing || error !== null} accounts={workspace.accounts} page={page} mode={workspace.mode} onNavigate={setPage} onCompose={compose}>
+  return <AppShell connectedAccountIds={workspace.connectedAccountIds} accounts={workspace.accounts} page={page} mode={workspace.mode} onNavigate={setPage} onCompose={compose}>
     {workspaceError}
     <div hidden={page !== "composer"}><ComposerPanel workspace={workspace} refreshing={refreshing || error !== null} onAccounts={() => setPage("accounts")} /></div>
     {page === "timeline" && <TimelineView workspace={workspace} />}

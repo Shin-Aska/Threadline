@@ -25,6 +25,7 @@ async function setup(page: Page, scenario = "ready") {
     } } });
   }, { scenario });
   await page.goto("/");
+  await page.getByRole("button", { name: "Composer", exact: true }).click();
 }
 async function capture(page: Page, name: string) {
   await page.screenshot({ path: ".omo/evidence/hashtags/" + name + ".png" });

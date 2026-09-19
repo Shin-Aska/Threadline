@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from "react";
-import { Check, CircleAlert, Feather, GitBranch, Send } from "lucide-react";
+import { Check, CircleAlert, Info, Send } from "lucide-react";
 import { desktopApi } from "../services/desktop";
 import { usePostPreview } from "../hooks/usePostPreview";
 import { useComposerStore } from "../stores/composer";
 import type { CanonicalPost, PublishResult, WorkspaceState } from "../types";
 import { DestinationPreview } from "./DestinationPreview";
+import { DestinationSelector } from "./DestinationSelector";
 import { ImageAttachments } from "./ImageAttachments";
 import { HashtagSuggestions } from "./HashtagSuggestions";
 import { activeHashtag } from "../hooks/useHashtags";
@@ -71,10 +72,14 @@ export function ComposerPanel({ workspace, refreshing, onAccounts }: ComposerPro
     finally { publishPending.current = false; setPublishing(false); }
   };
   return <div className="page composer-page">
-    <div className="composer-grid"><div className="editor-column"><section className="panel editor-panel" aria-labelledby="editor-heading"><div className="panel-heading"><h1 id="editor-heading"><Feather size={20} />Create your post</h1><span className="badge">Plain text</span></div><label className="sr-only" htmlFor="post-text">Post text</label><textarea ref={editor} id="post-text" disabled={publishing} value={text} onSelect={event => setSelection({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onChange={event => { setText(event.target.value); setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }); setDismissedTag(null); if (succeeded) setResult(null); }} placeholder="What’s happening?" spellCheck /><div className="editor-footer"><span>One source for every community</span><LimitMonitor accounts={destinations} count={count} /></div></section>
+    <div className="composer-grid"><div className="editor-column">
+    <header className="composer-heading"><h1 id="editor-heading">Composer</h1><p>Write a post and share it across your networks.</p></header>
+    <DestinationSelector workspace={workspace} disabled={publishing || refreshing} onAccounts={onAccounts} />
+    <section className="panel editor-panel" aria-labelledby="editor-heading"><label className="sr-only" htmlFor="post-text">Post text</label><textarea ref={editor} id="post-text" disabled={publishing} value={text} onSelect={event => setSelection({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onChange={event => { setText(event.target.value); setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }); setDismissedTag(null); if (succeeded) setResult(null); }} placeholder="What’s on your mind?" spellCheck />
     {activeTag && <HashtagSuggestions key={activeTag.start} editor={editor} text={text} anchorIndex={activeTag.start} query={activeTag.query} accountIds={selected} workspace={workspace} onChoose={chooseTag} onClose={() => setDismissedTag(tagKey)} />}
-    <ImageAttachments media={media} disabled={publishing} onReading={setReadingImages} onChange={images => { setMedia(images); if (succeeded) setResult(null); }} />
-    <section className="panel policy-panel"><fieldset disabled={publishing}><legend><GitBranch size={17} />Publishing policy</legend><p className="muted">Choose how your post adapts across networks.</p><div className="policies">{policies.map(item => <label key={item.value} className={`policy ${policy === item.value ? "selected" : ""}`}><input type="radio" name="publishing-policy" checked={policy === item.value} onChange={() => setPolicy(item.value)} /><span><strong>{item.label}</strong><small>{item.detail}</small></span>{policy === item.value && <Check size={14} />}</label>)}</div></fieldset></section>
+    <ImageAttachments media={media} disabled={publishing} onReading={setReadingImages} counter={<LimitMonitor accounts={destinations} count={count} />} onChange={images => { setMedia(images); if (succeeded) setResult(null); }} />
+    </section>
+    <section className="panel policy-panel"><fieldset disabled={publishing}><legend>Publishing policy <Info size={16} aria-hidden="true" /></legend><div className="policies">{policies.map(item => <label key={item.value} className={`policy ${policy === item.value ? "selected" : ""}`}><input type="radio" name="publishing-policy" checked={policy === item.value} onChange={() => setPolicy(item.value)} /><span><strong>{item.label}</strong><small>{item.detail}</small></span></label>)}</div></fieldset></section>
     {policy === "COMMON_LIMIT" && preview?.effectiveLimit && <Notice>Common limit: {preview.effectiveLimit} graphemes, set by {accounts.find(account => account.id === preview.limitingAccountId)?.handle}.</Notice>}
     {!native && <Notice>Preview mode. Open the desktop app to calculate native threads and publish to your accounts.</Notice>}
     {native && disconnected && <Notice error>Some selected accounts need reconnecting. <button className="button" onClick={onAccounts}>Manage accounts</button></Notice>}
@@ -82,8 +87,8 @@ export function ComposerPanel({ workspace, refreshing, onAccounts }: ComposerPro
     {previewError && <Notice error><span>{previewError}</span><button className="button" onClick={retry}>Retry preview</button></Notice>}
     {error && <Notice error>{error}</Notice>}
 
-    </div><DestinationPreview accounts={destinations} preview={preview} text={text} media={media} native={native} /></div>
     {result && <Notice error={!succeeded}><strong>{succeeded ? "Published successfully" : receivedPosts ? "Some posts were published" : "Publishing failed"}</strong><ul className="publication-results">{result.publications.map(publication => <li key={publication.accountId}><span>{accounts.find(account => account.id === publication.accountId)?.handle ?? publication.accountId}</span><span>{publication.status === "PUBLISHED" ? "Published" : publication.remotePostIds.length ? "Partially published" : "Failed"}{publication.error ? `: ${publication.error}` : ""}</span></li>)}</ul>{!succeeded && receivedPosts && <p>Your draft was kept. Destinations that received posts have been deselected. Check any partially published threads before sending again.</p>}</Notice>}
     <div className="dispatch-bar"><div role="status" aria-live="polite" aria-atomic="true">{succeeded ? <Check size={16} aria-hidden="true" /> : feedback ? <CircleAlert size={16} aria-hidden="true" /> : <span className="status-dot" />}<span>{publishing ? "Publishing to your destinations…" : feedback ? feedback : !native ? "Desktop app required to publish" : !destinations.length ? "Select a destination" : !text.trim() && !media.length ? "Write your first line or add images" : readingImages ? "Reading images…" : refreshing ? "Refreshing accounts…" : disconnected ? "Reconnect selected accounts" : planning ? "Planning native threads…" : previewError ? "Resolve preview error" : "Ready to publish to " + destinations.length + (destinations.length === 1 ? " account" : " accounts")}</span></div><button className="button button-primary publish-button" disabled={!canPublish} aria-busy={publishing} onClick={() => void publish()}><Send size={16} />{publishing ? "Publishing…" : `Publish to ${destinations.length} ${destinations.length === 1 ? "account" : "accounts"}`}</button></div>
+    </div><DestinationPreview accounts={destinations} preview={preview} text={text} media={media} native={native} /></div>
   </div>;
 }

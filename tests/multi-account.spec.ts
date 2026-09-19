@@ -27,10 +27,11 @@ export async function setupMulti(page: Page, scenario = "ready") {
     } } });
   }, { scenario });
   await page.goto("/");
+  await page.getByRole("button", { name: "Composer", exact: true }).click();
 }
 test("selected accounts drive contextual discovery, grouped previews and dispatch", async ({ page }) => {
   await setupMulti(page);
-  await expect(page.locator(".sidebar").getByRole("checkbox")).toHaveCount(5);
+  await expect(page.locator(".destination-chip")).toHaveCount(5);
   const editor = page.getByLabel("Post text", { exact: true });
   await editor.fill("Shipping a multi-account flow #dra");
   const popover = page.getByRole("listbox", { name: "Hashtag suggestions" });
@@ -45,7 +46,7 @@ test("selected accounts drive contextual discovery, grouped previews and dispatc
   await editor.press("Enter");
   await expect(editor).toHaveValue("Shipping a multi-account flow #drawing");
   await expect(popover).toHaveCount(0);
-  await page.locator(".sidebar").getByRole("checkbox").nth(4).uncheck();
+  await page.getByRole("button", { name: /^Remove destination Creative Corner/ }).click();
   await expect(page.getByRole("button", { name: "Publish to 4 accounts", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Publish to 4 accounts", exact: true }).click();
   await expect(page.locator(".dispatch-bar")).toContainText("Published successfully");
@@ -72,9 +73,9 @@ test("different same-protocol thread plans remain visible inside one group", asy
 for (const width of [375, 768, 1280, 1672]) test("multi-account layouts and floating states at " + width, async ({ page }) => {
   await page.setViewportSize({ width, height: width === 1672 ? 941 : 900 }); await setupMulti(page);
   if (width === 375) {
-    await page.getByRole("button", { name: "Accounts 5/5", exact: true }).click();
+    await page.getByRole("button", { name: "Add more", exact: true }).click();
     await page.screenshot({ path: ".omo/evidence/multi-account/identities-375.png" });
-    await page.getByRole("button", { name: "Accounts 5/5", exact: true }).click();
+    await page.getByRole("button", { name: "Add more", exact: true }).click();
   }
   const editor = page.getByLabel("Post text", { exact: true });
   await editor.fill("Shipping a cleaner multi-account flow today!");
@@ -134,7 +135,9 @@ test("filters, expansion and no selection remain one keyboard workflow", async (
   await page.screenshot({ path: ".omo/evidence/multi-account/expanded.png" });
   await editor.press("ArrowUp"); await expect(page.getByRole("option", { selected: true })).toContainText("#draw");
   await editor.press("Enter"); await expect(editor).toHaveValue("#draw");
-  for (const checkbox of await page.locator(".sidebar").getByRole("checkbox").all()) await checkbox.uncheck();
+  await page.getByRole("button", { name: "Add more", exact: true }).click();
+  for (const checkbox of await page.locator(".destination-options").getByRole("checkbox").all()) await checkbox.uncheck();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Publish to 0 accounts", exact: true })).toBeDisabled();
   await expect(page.locator(".protocol-group")).toHaveCount(0);
   await editor.fill("#dra");

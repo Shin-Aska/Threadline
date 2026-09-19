@@ -47,6 +47,7 @@ async function installDesktop(page: Page, scenario: "connect" | "ready" | "previ
 }
 async function draft(page: Page) {
   await page.goto("/");
+  await page.getByRole("button", { name: "Composer", exact: true }).click();
   await page.getByRole("textbox", { name: "Post text" }).fill("A post for the test workspace.");
 }
 
@@ -64,15 +65,20 @@ test("fresh browser opens setup without sample accounts or composer", async ({ p
   await expect(page.getByLabel("Access token", { exact: true })).toBeVisible();
 });
 
-test("first real connection opens the composer with a selected target and empty draft", async ({ page }) => {
+test("first real connection opens Timeline and keeps an empty composer ready", async ({ page }) => {
   await installDesktop(page, "connect"); await page.goto("/");
   await expect(page.getByRole("heading", { name: "Connect your first account" })).toBeVisible();
   await page.getByLabel("Handle", { exact: true }).fill("writer.bsky.social");
   await page.getByLabel("App password", { exact: true }).fill("test-only-password");
   await page.getByRole("button", { name: "Connect account" }).click();
+  await expect(page.getByRole("heading", { name: "Timeline", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation").locator(".nav-item > span")).toHaveText(["Timeline", "Discover", "Following", "Composer", "Accounts & Sync"]);
+  await page.getByRole("button", { name: "Composer", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
-  await expect(page.locator(".identity-choice")).toHaveCount(1);
+  await expect(page.locator(".destination-chip")).toHaveCount(1);
+  await page.getByRole("button", { name: "Add more", exact: true }).click();
   await expect(page.getByRole("checkbox")).toBeChecked();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("radio", { name: /Common limit/i })).toBeChecked();
   await expect(page.getByRole("button", { name: "Publish to 1 account" })).toBeDisabled();
 });
@@ -141,6 +147,8 @@ test("rapid publish clicks send only once while publication is pending", async (
   await button.evaluate(element => { if (!(element instanceof HTMLButtonElement)) throw new Error("Expected publish button"); element.click(); element.click(); });
   await expect(page.getByRole("button", { name: "Publishing…", exact: true })).toBeDisabled();
   await expect(page.getByRole("textbox", { name: "Post text" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add more", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Remove destination/ })).toBeDisabled();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-publish-count"))).toBe("1");
   await page.evaluate(() => window.dispatchEvent(new Event("qa-release-publish")));
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
@@ -159,6 +167,7 @@ for (const scenario of ["publish-partial", "publish-partial-thread"] as const) t
   await page.getByRole("button", { name: "Publish to 2 accounts" }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("A post for the test workspace.");
   await expect(page.locator(".dispatch-bar")).toContainText("Some posts were published");
+  await page.getByRole("button", { name: "Add more", exact: true }).click();
   await expect(page.getByRole("checkbox").first()).not.toBeChecked();
   if (scenario === "publish-partial") await expect(page.getByRole("checkbox").nth(1)).toBeChecked();
   else {
@@ -197,5 +206,5 @@ test("workspace load failure has retry without presenting an empty composer", as
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveCount(0);
   await page.evaluate(() => window.dispatchEvent(new Event("qa-workspace-recovered")));
   await page.getByRole("button", { name: "Retry workspace" }).click();
-  await expect(page.getByRole("textbox", { name: "Post text" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Timeline", exact: true })).toBeVisible();
 });

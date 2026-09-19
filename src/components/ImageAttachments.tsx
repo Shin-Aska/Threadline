@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ImagePlus, X } from "lucide-react";
 import type { MediaAttachment } from "../types";
 import { Notice } from "./ui";
@@ -8,6 +9,7 @@ interface ImageAttachmentsProps {
   readonly disabled: boolean;
   readonly onChange: (media: MediaAttachment[]) => void;
   readonly onReading: (reading: boolean) => void;
+  readonly counter: ReactNode;
 }
 const acceptedTypes = ["image/jpeg", "image/png", "image/webp"];
 function readImage(file: File): Promise<MediaAttachment> {
@@ -25,7 +27,7 @@ function readImage(file: File): Promise<MediaAttachment> {
     reader.readAsDataURL(file);
   });
 }
-export function ImageAttachments({ media, disabled, onChange, onReading }: ImageAttachmentsProps) {
+export function ImageAttachments({ media, disabled, onChange, onReading, counter }: ImageAttachmentsProps) {
   const input = useRef<HTMLInputElement>(null);
   const pending = useRef(false);
   const [reading, setReading] = useState(false);
@@ -43,9 +45,10 @@ export function ImageAttachments({ media, disabled, onChange, onReading }: Image
     finally { pending.current = false; setReading(false); onReading(false); }
   }
   return <section className="panel images-panel" aria-labelledby="images-heading">
-    <div className="panel-heading"><h2 id="images-heading"><ImagePlus size={18} />Images <span className="muted">{media.length}/4</span></h2><button type="button" className="button" disabled={locked || media.length === 4} onClick={() => input.current?.click()}><ImagePlus size={15} />Add images</button></div>
+    <h2 id="images-heading" className="sr-only">Images</h2>
+    <div className="attachment-toolbar"><button type="button" className="button" title="JPEG, PNG, or WebP · up to 2 MB each" disabled={locked || media.length === 4} onClick={() => input.current?.click()}><ImagePlus size={20} />Add images</button><span className="attachment-count" aria-label={`${media.length} of 4 images`}>{media.length} / 4</span>{counter}</div>
     <input ref={input} className="sr-only" type="file" tabIndex={-1} aria-label="Choose images" accept={acceptedTypes.join(",")} multiple disabled={locked} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void add(files); }} />
-    <p className="muted media-help">JPEG, PNG, or WebP · up to 2 MB each. Images attach to the first post of a thread.</p>
+    {media.length > 0 && <p className="muted media-help">JPEG, PNG, or WebP · up to 2 MB each. Images attach to the first post of a thread.</p>}
     {reading && <p role="status">Reading images…</p>}
     {error && <Notice error>{error}</Notice>}
     <div className="attachment-list">{media.map((item, index) => <div className="attachment-card" key={item.id}>

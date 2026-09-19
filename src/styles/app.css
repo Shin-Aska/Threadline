@@ -1,6 +1,7 @@
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/jetbrains-mono';
 @import './composer.css';
+@import './workspace.css';
 :root {
   font-family: 'Geist Variable', system-ui, sans-serif; color: var(--text); background: var(--canvas); font-synthesis: none; color-scheme: dark;
   --canvas: #0b1326; --inset: #060e20; --panel: #131b2e; --container: #171f33; --raised: #222a3d; --high: #2d3449;

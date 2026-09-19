@@ -96,6 +96,16 @@ npm run dev
 
 The browser preview cannot connect accounts or publish.
 
+### VS Code
+
+The repository includes VS Code launch configurations. Open **Run and Debug** and choose:
+
+- **Tauri: Dev** to run the complete desktop application through the Tauri CLI.
+- **Tauri: Debug Rust Core** to launch the application with Rust breakpoints through CodeLLDB.
+- **Frontend: Browser Preview** for frontend-only debugging in Chrome.
+
+Install the workspace's recommended extensions when prompted. The Rust debugger configuration starts the Vite development server automatically.
+
 ## Connect accounts
 
 The first launch opens **Connect your first account**.

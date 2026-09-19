@@ -23,6 +23,7 @@ async function setup(page: Page, failure = false) {
     } } });
   }, { failure });
   await page.goto("/");
+  await page.getByRole("button", { name: "Composer", exact: true }).click();
 }
 async function capture(page: Page, name: string) {
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0, 0); });

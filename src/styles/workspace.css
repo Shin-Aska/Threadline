@@ -1,0 +1,143 @@
+:root {
+  --workspace-header: 68px; --workspace-sidebar: 274px; --workspace-nav-inset: 14px;
+  --composer-padding: 32px; --composer-title: 36px; --composer-copy: 16px; --composer-editor: 20px;
+  --composer-edge: #29405b; --composer-selected: #12335a; --composer-radius: 12px; --composer-control: 48px;
+}
+.shell { --sidebar-width: var(--workspace-sidebar); }
+.shell .workspace-brandbar { position: sticky; top: 0; z-index: 35; height: var(--workspace-header); display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-6); border-bottom: 1px solid var(--edge); background: var(--canvas); }
+.workspace-brandbar strong { font-size: var(--font-section); font-weight: 500; }
+.shell .sidebar { top: var(--workspace-header); background: var(--canvas); }
+.shell .sidebar nav { padding: var(--space-6) var(--workspace-nav-inset); gap: var(--space-2); }
+.shell .sidebar .nav-item { min-height: 60px; padding: var(--space-4) var(--space-5); gap: var(--space-5); border: 1px solid transparent; border-radius: var(--composer-radius); }
+.shell .sidebar .nav-item>svg { width: 24px; height: 24px; color: var(--primary); }
+.shell .sidebar .nav-item.active { background: var(--composer-selected); border-color: color-mix(in srgb, var(--blue) 30%, transparent); box-shadow: none; color: var(--text); }
+.shell .sidebar .nav-item>span { font-size: var(--composer-copy); }
+.shell .sidebar .connected-count { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 var(--space-2); border-radius: var(--radius-lg); background: var(--raised); color: var(--primary); font: 500 var(--font-caption)/1 var(--mono); flex: none; }
+.shell .sidebar-bottom { padding: var(--space-6); }
+.shell .sidebar-bottom .version { display: none; }
+.shell .local-note { line-height: 1.6; }
+.shell .app-content { margin-left: var(--sidebar-width); }
+
+.composer-page.page { display: block; padding: 0; max-width: none; margin: 0; min-height: calc(100dvh - var(--workspace-header)); }
+.composer-page .composer-grid { grid-template-columns: minmax(0, 1.64fr) minmax(0, 1fr); gap: 0; align-items: stretch; }
+.composer-page .editor-column { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--composer-padding); }
+.composer-page .composer-heading h1 { font-size: var(--composer-title); line-height: 44px; letter-spacing: -.03em; }
+.composer-heading p { color: var(--text-secondary); font-size: var(--composer-copy); margin-top: var(--space-2); }
+.destination-selector { position: relative; }
+.composer-page .destination-selector h2 { font-size: var(--composer-copy); font-weight: 500; margin-bottom: var(--space-3); }
+.destination-chips { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); }
+.destination-chip { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; max-width: 100%; padding: var(--space-2) 0 var(--space-2) var(--space-4); border: 1px solid var(--blue); border-radius: var(--composer-radius); background: color-mix(in srgb, var(--composer-selected) 45%, var(--canvas)); color: var(--text); }
+.destination-chip>svg { width: 24px; height: 24px; color: var(--blue); }
+.destination-chip.mastodon>svg { color: var(--secondary); }
+.destination-copy { min-width: 0; }
+.destination-copy strong { display: block; font-size: var(--font-body); font-weight: 500; overflow-wrap: anywhere; }
+.destination-copy strong>span { color: var(--text-secondary); }
+.destination-copy small { display: block; font-size: var(--font-caption); color: var(--text-secondary); overflow-wrap: anywhere; }
+.destination-copy small.danger { color: var(--error); }
+.remove-destination { display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 0; border-radius: var(--radius-lg); color: var(--text-secondary); background: transparent; }
+.remove-destination:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.destination-picker { max-width: 100%; }
+.composer-page .add-destination { min-height: var(--composer-control); padding-inline: var(--space-3); background: transparent; color: var(--primary); font-size: var(--font-component); }
+.destination-options { position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 30; width: 360px; max-width: 100%; max-height: min(420px, 65dvh); overflow-y: auto; padding: var(--space-4); background: var(--panel); border: 1px solid var(--composer-edge); border-radius: var(--composer-radius); box-shadow: var(--popup-shadow); }
+.destination-options legend { font-size: var(--font-component); }
+.destination-option { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-2); border-radius: var(--radius-lg); cursor: pointer; }
+.destination-option:hover { background: var(--raised); }
+.destination-option:has(:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.destination-option>svg { color: var(--primary); }
+.destination-option>span { min-width: 0; }
+.destination-option strong, .destination-option small { display: block; overflow-wrap: anywhere; }
+.destination-option small { color: var(--text-secondary); }
+.destination-option small.danger { color: var(--error); }
+.composer-page .link-account { width: 100%; margin-top: var(--space-3); min-height: 44px; }
+.destination-hint { color: var(--text-secondary); margin-top: var(--space-3); }
+.composer-page .editor-panel { padding: 0; overflow: visible; border-color: var(--composer-edge); border-radius: var(--composer-radius); background: color-mix(in srgb, var(--panel) 45%, var(--canvas)); }
+.composer-page .editor-panel:focus-within { border-color: var(--primary); }
+.composer-page .editor-panel #post-text { min-height: 300px; height: clamp(300px, 30dvh, 360px); padding: var(--space-6); border: 0; background: transparent; border-radius: var(--composer-radius); font-size: var(--composer-editor); line-height: 1.7; resize: vertical; }
+.composer-page .editor-panel #post-text:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
+.composer-page .images-panel { padding: 0 var(--space-5) var(--space-4); background: transparent; border: 0; }
+.attachment-toolbar { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.composer-page .attachment-toolbar .button { background: transparent; color: var(--text-secondary); font-size: var(--font-component); min-height: var(--composer-control); padding: var(--space-3); }
+.attachment-count { color: var(--muted); font: var(--font-caption)/1.5 var(--mono); white-space: nowrap; }
+.character-count { color: var(--text-secondary); font: var(--font-component)/1.5 var(--mono); white-space: nowrap; margin-left: auto; }
+.character-count.over-limit { color: var(--error); }
+.composer-page .media-help { margin: var(--space-3) 0; font-size: var(--font-caption); }
+.composer-page .attachment-list { margin: 0; }
+.composer-page .policy-panel { padding: var(--space-3) 0 0; background: transparent; border: 0; }
+.composer-page .policy-panel legend { font-size: var(--composer-copy); font-weight: 500; margin-bottom: var(--space-5); }
+.composer-page .policies { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.composer-page .policy { align-items: flex-start; padding: var(--space-5); gap: var(--space-3); border-color: var(--composer-edge); border-radius: var(--composer-radius); background: transparent; }
+.composer-page .policy.selected { border-color: var(--blue); background: color-mix(in srgb, var(--composer-selected) 40%, var(--canvas)); }
+.composer-page .policy input { margin-top: 3px; accent-color: var(--blue); }
+.composer-page .policy strong { font-size: var(--font-component); line-height: 22px; }
+.composer-page .policy small { color: var(--text-secondary); font-size: var(--font-caption); line-height: 1.6; margin-top: var(--space-2); }
+.composer-page .dispatch-bar { position: static; display: flex; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-6) 0 0; border: 0; border-top: 1px solid var(--composer-edge); border-radius: 0; background: transparent; backdrop-filter: none; box-shadow: none; }
+.composer-page .dispatch-bar>div { flex: 1; min-width: 150px; font-family: inherit; font-size: var(--font-caption); line-height: 1.6; color: var(--text-secondary); }
+.composer-page .publish-button { min-height: 56px; padding: var(--space-4) var(--space-6); margin-left: auto; border-radius: var(--composer-radius); background: var(--blue); color: var(--inset); font-size: var(--composer-copy); }
+.composer-page .publish-button:hover:not(:disabled) { background: var(--primary); }
+.composer-page .preview-column { display: flex; flex-direction: column; gap: var(--space-5); min-height: calc(100dvh - var(--workspace-header)); padding: var(--composer-padding) var(--space-5); border-left: 1px solid var(--edge); }
+.composer-page .preview-panel { display: block; padding: 0; background: transparent; border: 0; }
+.preview-heading { padding: 0 var(--space-4); margin-bottom: var(--space-6); }
+.composer-page .preview-heading h2 { font-size: var(--font-section); line-height: 28px; }
+.preview-heading p { margin-top: var(--space-2); font-size: var(--composer-copy); line-height: 1.6; color: var(--text-secondary); }
+.protocol-group { border: 1px solid var(--composer-edge); border-radius: var(--composer-radius); background: color-mix(in srgb, var(--panel) 40%, var(--canvas)); overflow: hidden; color: var(--text); }
+.protocol-group+.protocol-group { margin-top: var(--space-5); }
+.protocol-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); min-height: 60px; padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--edge); }
+.protocol-heading h3 { display: flex; align-items: center; gap: var(--space-3); font-size: var(--composer-copy); font-weight: 500; }
+.protocol-heading h3 svg { width: 24px; height: 24px; color: var(--primary); }
+.protocol-group.mastodon h3 svg { color: var(--secondary); }
+.protocol-heading>span { color: var(--text-secondary); font-size: var(--font-caption); }
+.preview-identities { display: grid; gap: var(--space-4); padding: var(--space-5) var(--space-6) 0; max-height: 220px; overflow-y: auto; }
+.preview-identities .avatar { width: 48px; height: 48px; border-radius: 50%; font-size: var(--font-section); }
+.preview-identities .identity { gap: var(--space-4); }
+.preview-identities .identity strong { font-size: var(--font-component); line-height: 24px; overflow-wrap: anywhere; }
+.preview-identities .handle { color: var(--text-secondary); font-family: inherit; font-size: var(--font-body); line-height: 20px; }
+.composer-page .protocol-group .post-preview { background: transparent; padding: var(--space-4) var(--space-6); }
+.protocol-group .thread-part p { font-size: var(--composer-copy); line-height: 1.65; padding: var(--space-2) 0; }
+.protocol-status { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6) var(--space-5); font-size: var(--font-caption); color: var(--text-secondary); }
+.variant-note { padding: var(--space-4) var(--space-6) 0; color: var(--text-secondary); font-size: var(--font-caption); }
+.protocol-variant+.protocol-variant { border-top: 1px solid var(--edge); }
+.preview-help { padding: 0 var(--space-4); font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.6; }
+@media (max-width: 1400px) {
+  .composer-page { --composer-padding: 24px; --composer-editor: 18px; }
+  .composer-page .policies { gap: var(--space-3); }
+  .composer-page .policy { padding: var(--space-4); }
+}
+@media (max-width: 1200px) { .shell { --workspace-sidebar: 224px; }.shell .sidebar .nav-item { gap: var(--space-3); padding-inline: var(--space-3); }.shell .sidebar .nav-item>span { font-size: var(--font-body); } }
+@media (max-width: 1100px) {
+  .composer-page .composer-grid { grid-template-columns: 1fr; }
+  .composer-page .preview-column { min-height: 0; border-left: 0; border-top: 1px solid var(--edge); padding: var(--composer-padding); }
+  .preview-heading { padding: 0; }
+}
+@media (min-width: 601px) and (max-width: 1050px) {
+  .shell { --workspace-sidebar: 72px; }
+  .shell .sidebar nav { padding-inline: var(--space-3); }
+  .shell .sidebar .nav-item { position: relative; justify-content: center; }
+  .shell .sidebar .nav-item>span { display: none; }
+  .shell .sidebar .connected-count { position: absolute; top: 0; right: 0; min-width: 20px; height: 20px; font-size: var(--font-xs); }
+}
+@media (max-width: 600px) {
+  .shell { --workspace-header: 56px; --workspace-sidebar: 0px; }
+  .shell .workspace-brandbar { padding-inline: var(--space-5); }
+  .shell .sidebar { position: static; border-bottom: 1px solid var(--edge); }
+  .shell .sidebar nav { width: 100%; display: flex; justify-content: space-around; padding: var(--space-2) var(--space-3); gap: var(--space-1); }
+  .shell .sidebar .nav-item { position: relative; justify-content: center; flex: 1; min-height: 48px; padding: var(--space-3); }
+  .shell .sidebar .nav-item>span { display: none; }
+  .shell .sidebar .connected-count { position: absolute; top: 0; right: 0; min-width: 20px; height: 20px; font-size: var(--font-xs); }
+  .composer-page { --composer-padding: 16px; --composer-title: 28px; --composer-editor: 16px; }
+  .composer-page .editor-column { gap: var(--space-5); }
+  .composer-page .composer-heading h1 { line-height: 36px; }
+  .composer-page .editor-panel #post-text { min-height: 280px; height: 280px; padding: var(--space-5); }
+  .composer-page .images-panel { padding-inline: var(--space-3); }
+  .composer-page .attachment-toolbar .button { font-size: var(--font-body); }
+  .attachment-count, .character-count { font-size: var(--font-caption); }
+  .composer-page .policies { grid-template-columns: 1fr; }
+  .composer-page .policy { padding: var(--space-5); }
+  .composer-page .policy small { margin-top: var(--space-1); }
+  .composer-page .dispatch-bar { align-items: stretch; }
+  .composer-page .dispatch-bar>div { justify-content: flex-start; }
+  .composer-page .publish-button { margin-left: 0; width: 100%; }
+  .destination-options { top: 100%; left: 0; width: 100%; }
+  .protocol-heading { padding-inline: var(--space-5); }
+  .preview-identities { padding-inline: var(--space-5); }
+  .composer-page .protocol-group .post-preview, .protocol-status { padding-inline: var(--space-5); }
+}
