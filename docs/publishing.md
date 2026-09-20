@@ -1,48 +1,33 @@
-# Publishing and thread planning
+# Publishing, history, and schedules
 
-## From draft to preview
+Publishing is native and durable. The renderer edits a durable draft through [`publishingApi`](../src/services/desktop/publishing.ts); [`commands/publishing.rs`](../src-tauri/src/commands/publishing.rs) is the authoritative command layer for drafts, publication history, and schedules.
 
-The composer store holds text, image data, destination account IDs, and a publishing policy. [`usePostPreview`](../src/hooks/usePostPreview.ts) waits 250 ms after changes before requesting a native preview. Image bytes are omitted from preview requests; metadata is retained.
+## Native persistence and commands
 
-A preview belongs to a particular draft and workspace snapshot. Stale responses are ignored. Publishing requires a current preview, connected destinations, and completed image reads.
+`save_draft`, `list_drafts`, `get_draft`, and `delete_draft` persist drafts in SQLite. A save advances the draft revision. `create_schedule` reads the selected draft and stores its post payload and draft revision in the schedule row, so later edits to the draft cannot silently alter the scheduled publication. The schedule also persists its chosen IANA time zone and an optimistic-concurrency revision.
 
-[`composer/mod.rs`](../src-tauri/src/composer/mod.rs) counts Unicode grapheme clusters and plans the parts for every destination:
+`publish_draft` creates or reuses a ledger keyed by the current durable draft revision, so repeated manual dispatch requests for that revision share one idempotency scope. `publish_scheduled` is internal scheduler work that uses a separate schedule-scoped ledger and its captured immutable post snapshot. `list_publications` and `delete_publication` manage the history; `list_schedules`, `reschedule_publication`, `cancel_schedule`, and `send_schedule_now` manage scheduled work. Reschedule and cancel require the current schedule revision and apply only to queued or needs-attention records.
 
-| Policy | Behavior |
-| --- | --- |
-| Common limit (default) | Use the shortest selected account limit for every destination |
-| Adaptive | Split separately using each account’s limit |
-| Always thread | Use per-account limits and always add numbering, even for a single part |
+## Native dispatch and recovery
 
-Common limit still splits an overlong draft; it is not a hard editor cutoff. The planner prefers paragraph, sentence, whitespace, then grapheme boundaries. It reserves room for `1/N ` prefixes and recalculates until the part count fits. Image-only posts produce one empty text part.
+[`publishing/mod.rs`](../src-tauri/src/publishing/mod.rs) writes the publication ledger before provider I/O. It records each destination and each segment as pending, in flight, published, failed, blocked, or uncertain. A destination is claimed before sending; each thread segment is claimed before its provider call. This gives restart recovery a durable answer about what was being attempted even when a provider response is lost.
 
-Capability fields describe counting policies and reserved URL lengths, but the current planner uses grapheme counting rather than provider-native URL counting.
+For each eligible destination, native code re-plans the captured post against current account capabilities, prepares media, clones connected providers out of shared state, and sends segments in order. The first segment carries media; later segments reply to the preceding remote post. A missing/disconnected account is recorded as blocked. A provider failure after a segment starts is recorded as uncertain because the remote outcome may be unknown. On startup, in-flight destinations and segments become uncertain with a recovery explanation.
 
-## The native write path
+There is no cross-provider transaction and no guarantee that a manual retry will be idempotent across every provider. Review recorded remote IDs and uncertain results before retrying. Publication history is durable until the user deletes it.
 
-[`publish_to_accounts`](../src-tauri/src/commands/mod.rs) performs these steps:
+## Scheduling semantics
 
-1. Read accounts and re-plan the submitted draft.
-2. Validate and decode media.
-3. Clone available provider clients out of the shared map.
-4. Publish to each destination sequentially.
-5. Publish the first part, then reply to the previous part for each continuation.
-6. Return a separate result for every destination, including remote IDs already created.
+The desktop process checks due schedules every 15 seconds. Automatic dispatch only claims an item no more than 60 seconds after its scheduled instant. A schedule beyond that grace period becomes **Needs attention** instead of sending late. Startup marks queued items whose time elapsed while Threadline was closed as **Needs attention**, and interrupted dispatch is also recovered for review.
 
-Images attach only to the first part. A failed destination does not prevent later destinations from being attempted. No lock is held on the provider map during network publishing.
+Use **Send now** for a missed item, or reschedule/cancel it with the record’s current revision. Scheduling is local to the desktop installation; it does not run while the app is closed and does not provide a hosted delivery service.
 
-## Images and hashtags
+## Planning and media
 
-Images must be JPEG, PNG, or WebP, with at most four attachments and 2,000,000 bytes per image. Alt text is limited to 1,500 Unicode characters. The frontend keeps base64 data in memory; Rust checks decoded size and image signatures before uploading.
+The native composer planner counts Unicode grapheme clusters and produces destination-specific thread parts. The UI requests a preview after a short debounce, but native dispatch re-plans rather than trusting a cached preview. The policy selects a shared shortest limit, destination-adaptive limits, or forced numbering. The planner prefers paragraph, sentence, whitespace, then grapheme boundaries and reserves numbering space until the part count fits.
 
-Bluesky uploads blobs and creates an image embed. Mastodon uploads media before creating statuses. Provider-specific code lives beside each provider implementation.
+Threadline accepts up to four JPEG, PNG, or WebP images, 2 MB each, or one MP4 video. Images and video cannot be mixed; alt text is limited to 1,500 characters. Provider capability limits remain authoritative: Bluesky advertises a 300 MB MP4 limit subject to provider allowance and processing, while Mastodon capability discovery supplies usable video limits when available. Polls, content warnings, audio, and other video formats are not composer-supported.
 
-Hashtag suggestions use connected account data. Mastodon activity and Bluesky search-match counts are different measurements, not a combined reach estimate. Bluesky publication adds hashtag facets using UTF-8 byte offsets; link and mention facets are not generated.
+## Verification boundaries
 
-## Failures and retries
-
-The UI blocks duplicate clicks while a publish request is pending. Full success clears the draft and attachments. Failure preserves them and displays per-account results.
-
-After a partial result, the UI removes destinations that succeeded **or created any remote posts** from the draft’s selected destinations. This reduces accidental duplicates during a retry, but it does not resume an incomplete remote thread. Check the provider before manually retrying that account.
-
-There is no cross-network transaction, durable publish queue, or server-side idempotency guarantee. Results include a generated `canonicalId`, but neither the draft nor publication results are currently written to SQLite. Closing the app loses this session’s retry context.
+The controlled browser bridge used by Playwright can demonstrate draft and UI lifecycles but cannot validate a native publication or a live provider result. Run the Rust checks for durable native behavior and use real accounts only when intentionally performing integration work; see [development](development.md#checks).
