@@ -1,5 +1,6 @@
 use super::*;
 use crate::accounts::mock_accounts;
+use crate::config::provider_from_credential;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -48,22 +49,28 @@ fn state(database: Database, providers: ProviderMap) -> AppState {
         database,
         providers: RwLock::new(providers),
         credentials: Arc::new(MemoryCredentials::default()),
+        oauth: crate::oauth::coordinator::OAuthCoordinator::default(),
     }
 }
 
-#[test]
-fn managed_account_restores_without_samples_when_environment_is_empty() {
+#[tokio::test]
+async fn managed_account_restores_without_samples_when_environment_is_empty() {
     // Given a stored account and its available keychain credential.
     let database = Database::in_memory().expect("database");
     let account = real_account("bsky-managed");
     database
         .seed(std::slice::from_ref(&account))
         .expect("account");
-    let credentials = MemoryCredentials::default();
+    let credentials: Arc<dyn CredentialStore> = Arc::new(MemoryCredentials::default());
     credentials.set(&account.id, secret()).expect("credential");
     // When startup restores the workspace.
-    let providers =
-        initialize(&database, &credentials, (Vec::new(), ProviderMap::new())).expect("initialize");
+    let providers = initialize(
+        &database,
+        Arc::clone(&credentials),
+        (Vec::new(), ProviderMap::new()),
+    )
+    .await
+    .expect("initialize");
     // Then only the connected managed account is visible.
     let workspace = snapshot(&state(database, providers)).expect("snapshot");
     assert_eq!(workspace.accounts.len(), 1);
@@ -71,8 +78,8 @@ fn managed_account_restores_without_samples_when_environment_is_empty() {
     assert_eq!(workspace.mode, WorkspaceMode::Live);
 }
 
-#[test]
-fn stored_account_stays_disconnected_when_credential_is_unavailable() {
+#[tokio::test]
+async fn stored_account_stays_disconnected_when_credential_is_unavailable() {
     // Given a stored real account with no available credential.
     let database = Database::in_memory().expect("database");
     database
@@ -81,9 +88,10 @@ fn stored_account_stays_disconnected_when_credential_is_unavailable() {
     // When startup restores the workspace.
     let providers = initialize(
         &database,
-        &MemoryCredentials::default(),
+        Arc::new(MemoryCredentials::default()),
         (Vec::new(), ProviderMap::new()),
     )
+    .await
     .expect("initialize");
     // Then it retains the account without making a simulated connection.
     let workspace = snapshot(&state(database, providers)).expect("snapshot");
@@ -92,8 +100,8 @@ fn stored_account_stays_disconnected_when_credential_is_unavailable() {
     assert!(workspace.connected_account_ids.is_empty());
 }
 
-#[test]
-fn samples_are_removed_when_disconnected_real_account_exists() {
+#[tokio::test]
+async fn samples_are_removed_when_disconnected_real_account_exists() {
     // Given legacy samples alongside a real account whose keychain is unavailable.
     let database = Database::in_memory().expect("database");
     database.seed(&mock_accounts()).expect("samples");
@@ -103,9 +111,10 @@ fn samples_are_removed_when_disconnected_real_account_exists() {
     // When startup initializes the workspace.
     initialize(
         &database,
-        &MemoryCredentials::default(),
+        Arc::new(MemoryCredentials::default()),
         (Vec::new(), ProviderMap::new()),
     )
+    .await
     .expect("initialize");
     // Then the real account remains alone.
     let accounts = database.accounts().expect("accounts");
@@ -113,16 +122,17 @@ fn samples_are_removed_when_disconnected_real_account_exists() {
     assert_eq!(accounts[0].id, "bsky-managed");
 }
 
-#[test]
-fn fresh_workspace_has_no_accounts_without_credentials() {
+#[tokio::test]
+async fn fresh_workspace_has_no_accounts_without_credentials() {
     // Given a new empty database and no configured credentials.
     let database = Database::in_memory().expect("database");
     // When startup initializes the workspace.
     let providers = initialize(
         &database,
-        &MemoryCredentials::default(),
+        Arc::new(MemoryCredentials::default()),
         (Vec::new(), ProviderMap::new()),
     )
+    .await
     .expect("initialize");
     let workspace = snapshot(&state(database, providers)).expect("snapshot");
     assert_eq!(workspace.mode, WorkspaceMode::Disconnected);
@@ -145,8 +155,8 @@ fn empty_workspace_is_disconnected_when_last_account_was_removed() {
     assert!(workspace.accounts.is_empty());
 }
 
-#[test]
-fn environment_accounts_replace_samples_and_preserve_managed_accounts() {
+#[tokio::test]
+async fn environment_accounts_replace_samples_and_preserve_managed_accounts() {
     // Given samples, a managed account, and two environment connections.
     let database = Database::in_memory().expect("database");
     database.seed(&mock_accounts()).expect("samples");
@@ -156,15 +166,18 @@ fn environment_accounts_replace_samples_and_preserve_managed_accounts() {
     for account in &accounts {
         providers.insert(
             account.id.clone(),
-            provider_from_credential(account, secret()).expect("provider"),
+            provider_from_credential(account, secret())
+                .await
+                .expect("provider"),
         );
     }
     // When startup imports environment connections.
     let providers = initialize(
         &database,
-        &MemoryCredentials::default(),
+        Arc::new(MemoryCredentials::default()),
         (accounts, providers),
     )
+    .await
     .expect("initialize");
     // Then all real accounts remain with stable connected IDs.
     let workspace = snapshot(&state(database, providers)).expect("snapshot");
@@ -177,16 +190,17 @@ fn environment_accounts_replace_samples_and_preserve_managed_accounts() {
     assert_eq!(workspace.mode, WorkspaceMode::Live);
 }
 
-#[test]
-fn disconnected_environment_account_does_not_seed_samples() {
+#[tokio::test]
+async fn disconnected_environment_account_does_not_seed_samples() {
     // Given account metadata from the environment but no provider.
     let database = Database::in_memory().expect("database");
     // When initialization imports that metadata.
     let providers = initialize(
         &database,
-        &MemoryCredentials::default(),
+        Arc::new(MemoryCredentials::default()),
         (vec![real_account("bsky-env")], ProviderMap::new()),
     )
+    .await
     .expect("initialize");
     // Then it is stored as a disconnected account.
     let workspace = snapshot(&state(database, providers)).expect("snapshot");
@@ -208,16 +222,17 @@ fn snapshot_serializes_contract_when_disconnected() {
     );
 }
 
-#[test]
-fn legacy_sample_only_workspace_is_cleared_and_stays_empty_after_restart() {
+#[tokio::test]
+async fn legacy_sample_only_workspace_is_cleared_and_stays_empty_after_restart() {
     let database = Database::in_memory().expect("database");
     database.seed(&mock_accounts()).expect("samples");
     for _ in 0..2 {
         let providers = initialize(
             &database,
-            &MemoryCredentials::default(),
+            Arc::new(MemoryCredentials::default()),
             (Vec::new(), ProviderMap::new()),
         )
+        .await
         .expect("initialize");
         assert!(providers.is_empty());
         assert!(database.accounts().expect("accounts").is_empty());

@@ -1,11 +1,18 @@
 use crate::{
+    credentials::CredentialStore,
     models::{Account, CountingPolicy, PlatformCapabilities, ProviderKind},
+    oauth::bluesky::BlueskyOAuthCredential,
     providers::{bluesky::BlueskyProvider, mastodon::MastodonProvider, SocialProvider},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, sync::Arc};
 
 pub type ProviderMap = HashMap<String, Arc<dyn SocialProvider>>;
+
+enum ParsedCredential {
+    BlueskyOAuth(Box<BlueskyOAuthCredential>),
+    Legacy(StoredCredential),
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "provider", rename_all = "SCREAMING_SNAKE_CASE")]
@@ -21,38 +28,69 @@ pub enum StoredCredential {
     },
 }
 
-pub fn provider_from_credential(
+pub async fn provider_from_credential(
     account: &Account,
     encoded: &str,
 ) -> Option<Arc<dyn SocialProvider>> {
-    let credential: StoredCredential = serde_json::from_str(encoded).ok()?;
+    provider_from_credential_with_persistence(account, encoded, None).await
+}
+
+pub async fn provider_from_credential_with_persistence(
+    account: &Account,
+    encoded: &str,
+    persistence: Option<Arc<dyn CredentialStore>>,
+) -> Option<Arc<dyn SocialProvider>> {
+    let credential = parse_credential(encoded)?;
     let client = reqwest::Client::builder()
         .user_agent(concat!("Threadline/", env!("CARGO_PKG_VERSION")))
         .build()
         .ok()?;
     match credential {
-        StoredCredential::Bluesky {
+        ParsedCredential::BlueskyOAuth(credential) => {
+            let runtime = credential
+                .restore_with_persistence(persistence)
+                .await
+                .ok()?;
+            Some(Arc::new(BlueskyProvider {
+                app_password_session: Default::default(),
+                capabilities: account.capabilities.clone(),
+                client,
+                service_url: runtime.service_url(),
+                identifier: runtime.subject().into(),
+                app_password: String::new(),
+                oauth: Some(Arc::new(runtime)),
+            }))
+        }
+        ParsedCredential::Legacy(StoredCredential::Bluesky {
             service_url,
             identifier,
             app_password,
-        } => Some(Arc::new(BlueskyProvider {
-            search_session: Default::default(),
+        }) => Some(Arc::new(BlueskyProvider {
+            app_password_session: Default::default(),
             capabilities: account.capabilities.clone(),
             client,
             service_url,
             identifier,
             app_password,
+            oauth: None,
         })),
-        StoredCredential::Mastodon {
+        ParsedCredential::Legacy(StoredCredential::Mastodon {
             base_url,
             access_token,
-        } => Some(Arc::new(MastodonProvider {
+        }) => Some(Arc::new(MastodonProvider {
             capabilities: account.capabilities.clone(),
             client,
             base_url,
             access_token,
         })),
     }
+}
+
+fn parse_credential(encoded: &str) -> Option<ParsedCredential> {
+    serde_json::from_str::<BlueskyOAuthCredential>(encoded)
+        .map(|credential| ParsedCredential::BlueskyOAuth(Box::new(credential)))
+        .or_else(|_| serde_json::from_str(encoded).map(ParsedCredential::Legacy))
+        .ok()
 }
 
 fn value(names: &[&str]) -> Option<String> {
@@ -73,6 +111,8 @@ fn capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapabilities 
             "image/webp".into(),
             "video/mp4".into(),
         ],
+        max_video_bytes: (!mastodon).then_some(300_000_000),
+        max_video_duration_ms: None,
         supports_polls: mastodon,
         supports_content_warnings: mastodon,
     }
@@ -105,12 +145,13 @@ fn live_accounts_with(value: impl Fn(&[&str]) -> Option<String>) -> (Vec<Account
         providers.insert(
             id.clone(),
             Arc::new(BlueskyProvider {
-                search_session: Default::default(),
+                app_password_session: Default::default(),
                 capabilities: caps.clone(),
                 client: client.clone(),
                 service_url: service_url.clone(),
                 identifier: handle.clone(),
                 app_password,
+                oauth: None,
             }),
         );
         accounts.push(Account {
@@ -170,6 +211,53 @@ fn live_accounts_with(value: impl Fn(&[&str]) -> Option<String>) -> (Vec<Account
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn oauth_credential_fixture() -> &'static str {
+        r#"{
+            "subject":"did:plc:restartfixture",
+            "session":{
+                "dpop_key":{
+                    "kty":"EC",
+                    "crv":"P-256",
+                    "x":"NIRNgPVAwnVNzN5g2Ik2IMghWcjnBOGo9B-lKXSSXFs",
+                    "y":"iWF-Of43XoSTZxcadO9KWdPTjiCoviSztYw7aMtZZMc",
+                    "d":"9MuCYfKK4hf95p_VRj6cxKJwORTgvEU3vynfmSgFH2M"
+                },
+                "token_set":{
+                    "iss":"https://issuer.example",
+                    "sub":"did:plc:restartfixture",
+                    "aud":"https://pds.example",
+                    "scope":"atproto transition:generic",
+                    "refresh_token":"refresh-secret",
+                    "access_token":"access-secret",
+                    "token_type":"DPoP",
+                    "expires_at":null
+                }
+            },
+            "client":{
+                "mode":"LOCALHOST",
+                "redirect_uri":"http://127.0.0.1:49152/oauth/callback"
+            }
+        }"#
+    }
+
+    #[test]
+    fn persisted_oauth_session_is_distinguished_from_legacy_credentials() {
+        // Given a keychain-shaped Bluesky OAuth session containing refresh and DPoP material.
+        let encoded = oauth_credential_fixture();
+
+        // When startup parses the stored credential format.
+        let credential = parse_credential(encoded).expect("OAuth credential");
+
+        // Then it selects the OAuth restore path and retains the verified subject.
+        match credential {
+            ParsedCredential::BlueskyOAuth(credential) => {
+                assert_eq!(credential.did(), "did:plc:restartfixture");
+            }
+            ParsedCredential::Legacy(_) => panic!("OAuth session parsed as a legacy secret"),
+        }
+    }
+
     #[test]
     fn custom_environment_service_is_retained_in_public_account_metadata() {
         // Given explicit environment settings without changing process-global variables.

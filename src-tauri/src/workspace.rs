@@ -1,19 +1,20 @@
 use crate::{
-    config::{provider_from_credential, ProviderMap},
+    config::{provider_from_credential_with_persistence, ProviderMap},
     credentials::CredentialStore,
     database::Database,
     error::AppError,
     models::{Account, WorkspaceMode, WorkspaceState},
     AppState,
 };
+use std::sync::Arc;
 
 pub fn is_mock_account(id: &str) -> bool {
     matches!(id, "bsky-alice" | "mastodon-social" | "mastodon-long")
 }
 
-pub fn initialize(
+pub async fn initialize(
     database: &Database,
-    credentials: &dyn CredentialStore,
+    credentials: Arc<dyn CredentialStore>,
     environment: (Vec<Account>, ProviderMap),
 ) -> Result<ProviderMap, AppError> {
     let (live_accounts, mut providers) = environment;
@@ -21,7 +22,13 @@ pub fn initialize(
     for account in &stored_accounts {
         if !is_mock_account(&account.id) && !providers.contains_key(&account.id) {
             if let Ok(secret) = credentials.get(&account.id) {
-                if let Some(provider) = provider_from_credential(account, &secret) {
+                if let Some(provider) = provider_from_credential_with_persistence(
+                    account,
+                    &secret,
+                    Some(Arc::clone(&credentials)),
+                )
+                .await
+                {
                     providers.insert(account.id.clone(), provider);
                 }
             }

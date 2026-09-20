@@ -4,7 +4,7 @@ use super::{
 use crate::{hashtags::HashtagActivity, models::PreparedPost};
 fn bluesky(url: String) -> BlueskyProvider {
     BlueskyProvider {
-        search_session: Default::default(),
+        app_password_session: Default::default(),
         capabilities: crate::accounts::mock_accounts()[0].capabilities.clone(),
         client: reqwest::Client::builder()
             .no_proxy()
@@ -13,6 +13,7 @@ fn bluesky(url: String) -> BlueskyProvider {
         service_url: url,
         identifier: "fixture.invalid".into(),
         app_password: "fixture-only".into(),
+        oauth: None,
     }
 }
 fn mastodon(url: String) -> MastodonProvider {
@@ -94,7 +95,7 @@ async fn bluesky_reuses_search_session_and_keeps_missing_count_unknown() {
         .contains("authorization: bearer fixture-jwt"));
 }
 #[tokio::test]
-async fn rejected_search_session_is_renewed_on_retry() {
+async fn rejected_search_session_is_renewed_and_read_is_retried() {
     let (url, task) = server(vec![
         (
             200,
@@ -108,12 +109,19 @@ async fn rejected_search_session_is_renewed_on_retry() {
         (200, r#"{"hitsTotal":0,"posts":[]}"#),
     ]);
     let provider = bluesky(url);
-    assert!(provider.hashtags("Rust").await.is_err());
     assert!(matches!(
         provider.hashtags("Rust").await.expect("retry")[0].activity,
         HashtagActivity::Bluesky { matches: Some(0) }
     ));
-    assert!(task.join().expect("server")[3]
+    let requests = task.join().expect("server");
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|request| request.headers.contains("com.atproto.server.createSession"))
+            .count(),
+        2
+    );
+    assert!(requests[3]
         .headers
         .to_lowercase()
         .contains("authorization: bearer new-jwt"));

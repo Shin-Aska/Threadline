@@ -6,6 +6,8 @@ fn caps(max: usize, polls: bool, cw: bool, media: usize) -> PlatformCapabilities
         reserved_url_length: Some(23),
         max_media_attachments: media,
         supported_media_types: vec!["image/jpeg".into(), "image/png".into(), "video/mp4".into()],
+        max_video_bytes: None,
+        max_video_duration_ms: None,
         supports_polls: polls,
         supports_content_warnings: cw,
     }

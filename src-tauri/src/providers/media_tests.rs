@@ -33,12 +33,13 @@ async fn bluesky_uploads_bytes_and_embeds_alt_text() {
         (200, r#"{"uri":"at://test/post/1","cid":"test-cid"}"#),
     ]);
     let provider = BlueskyProvider {
-        search_session: Default::default(),
+        app_password_session: Default::default(),
         capabilities: crate::accounts::mock_accounts()[0].capabilities.clone(),
         client: client(),
         service_url: url,
         identifier: "test.invalid".into(),
         app_password: "fixture-only".into(),
+        oauth: None,
     };
     assert_eq!(
         provider.publish(post()).await.expect("publish").remote_id,

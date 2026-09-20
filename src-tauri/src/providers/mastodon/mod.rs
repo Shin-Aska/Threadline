@@ -1,5 +1,12 @@
+mod capabilities;
+mod discovery;
 mod hashtags;
 mod media;
+mod native;
+mod normalize;
+mod social_read;
+mod social_sources;
+mod social_write;
 use crate::{error::AppError, models::*, providers::SocialProvider};
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -69,7 +76,7 @@ impl MastodonProvider {
         post: PreparedPost,
         in_reply_to_id: Option<&str>,
     ) -> Result<PublishedPost, AppError> {
-        let media_ids = self.upload_images(&post.media).await?;
+        let media_ids = self.upload_media(&post.media).await?;
         let mut form = vec![("status", post.text)];
         form.extend(media_ids.into_iter().map(|id| ("media_ids[]", id)));
         if let Some(parent) = in_reply_to_id {
@@ -110,6 +117,74 @@ impl MastodonProvider {
 }
 #[async_trait]
 impl SocialProvider for MastodonProvider {
+    async fn home_feed(
+        &self,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::FeedPage, AppError> {
+        self.home_feed_page(cursor).await
+    }
+    async fn own_feed(
+        &self,
+        kind: crate::providers::social::ProfileFeedKind,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::FeedPage, AppError> {
+        self.own_feed_page(kind, cursor).await
+    }
+    async fn own_profile(&self) -> Result<crate::providers::social::ProfileDetails, AppError> {
+        self.own_profile_details().await
+    }
+    async fn profile(
+        &self,
+        profile_id: &str,
+    ) -> Result<crate::providers::social::ProfileDetails, AppError> {
+        self.profile_details(profile_id).await
+    }
+    async fn profile_feed(
+        &self,
+        profile_id: &str,
+        kind: crate::providers::social::ProfileFeedKind,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::FeedPage, AppError> {
+        self.profile_feed_page(profile_id, kind, cursor).await
+    }
+    async fn thread(
+        &self,
+        post_id: &str,
+    ) -> Result<crate::providers::social::ThreadView, AppError> {
+        self.thread_view(post_id).await
+    }
+    async fn tag_feed(
+        &self,
+        tag: &str,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::FeedPage, AppError> {
+        self.tag_feed_page(tag, cursor).await
+    }
+    async fn followed_sources_page(
+        &self,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::SourcePage, AppError> {
+        self.followed_sources_page_impl(cursor).await
+    }
+    async fn source_feed(
+        &self,
+        source: &crate::providers::social::FollowedSource,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::FeedPage, AppError> {
+        self.source_feed_page(source, cursor).await
+    }
+    async fn notifications(
+        &self,
+        cursor: Option<&str>,
+    ) -> Result<crate::providers::social::NotificationPage, AppError> {
+        self.notification_page(cursor).await
+    }
+    async fn social_action(
+        &self,
+        action: crate::providers::social::SocialAction,
+    ) -> Result<crate::providers::social::SocialActionResult, AppError> {
+        self.apply_social_action(action).await
+    }
     async fn timeline(
         &self,
         account_id: &str,
@@ -151,42 +226,13 @@ impl SocialProvider for MastodonProvider {
         account_id: &str,
         account_handle: &str,
     ) -> Result<serde_json::Value, AppError> {
-        let tags: Vec<serde_json::Value> = self
-            .client
-            .get(format!(
-                "{}/api/v1/trends/tags",
-                self.base_url.trim_end_matches('/')
-            ))
-            .bearer_auth(&self.access_token)
-            .query(&[("limit", "20")])
-            .send()
-            .await
-            .map_err(|e| AppError::Provider(format!("Mastodon trends failed: {e}")))?
-            .error_for_status()
-            .map_err(|e| AppError::Provider(format!("Mastodon trends failed: {e}")))?
-            .json()
-            .await
-            .map_err(|e| AppError::Provider(format!("Invalid Mastodon trends: {e}")))?;
-        let topics=tags.into_iter().filter_map(|t|{let name=t["name"].as_str()?;let history=t["history"].as_array().map(|h|h.iter().filter_map(|x|x["uses"].as_str()?.parse::<u64>().ok()).collect::<Vec<_>>()).unwrap_or_default();let count=history.iter().sum::<u64>();Some(serde_json::json!({"key":name.to_lowercase(),"name":name,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"MASTODON"}],"postCount":count,"history":history}))}).collect::<Vec<_>>();
-        Ok(serde_json::json!({"topics":topics,"suggestedAccounts":[],"popularPosts":[]}))
+        self.discovery_result(account_id, account_handle).await
     }
     async fn following_sources(&self, account_id: &str) -> Result<serde_json::Value, AppError> {
-        let tags: Vec<serde_json::Value> = self
-            .client
-            .get(format!(
-                "{}/api/v1/followed_tags",
-                self.base_url.trim_end_matches('/')
-            ))
-            .bearer_auth(&self.access_token)
-            .send()
-            .await
-            .map_err(|e| AppError::Provider(format!("Mastodon followed tags failed: {e}")))?
-            .error_for_status()
-            .map_err(|e| AppError::Provider(format!("Mastodon followed tags failed: {e}")))?
-            .json()
-            .await
-            .map_err(|e| AppError::Provider(format!("Invalid Mastodon followed tags: {e}")))?;
-        Ok(serde_json::json!(tags.into_iter().filter_map(|t|{let name=t["name"].as_str()?;Some(serde_json::json!({"id":format!("MASTODON:{}:{name}",self.base_url),"provider":"MASTODON","type":"TOPIC","title":format!("#{name}"),"description":"Followed Mastodon hashtag","accountId":account_id,"remoteId":name}))}).collect::<Vec<_>>()))
+        Ok(crate::providers::legacy_sources(
+            account_id,
+            self.followed_sources_page_impl(None).await?.sources,
+        ))
     }
     async fn hashtags(
         &self,

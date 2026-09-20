@@ -7,6 +7,10 @@ pub enum AppError {
     Credential(String),
     #[error("invalid post: {0}")]
     Validation(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
+    #[error("storage error: {0}")]
+    Storage(String),
     #[error("provider error: {0}")]
     Provider(String),
     #[error("account not found: {0}")]
