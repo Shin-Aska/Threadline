@@ -1,4 +1,5 @@
 import { ArrowLeftRight, Bell, ChevronDown, Compass, Feather, Home, Plus, ShieldCheck, Users } from "lucide-react";
+import packageJson from "../../package.json";
 import type { ReactNode } from "react";
 import type { Account, WorkspaceMode } from "../types";
 
@@ -31,7 +32,7 @@ export function AppShell({ accounts, connectedAccountIds, page, mode, onNavigate
         <button className={page === "accounts" ? "nav-item active" : "nav-item"} aria-label="Accounts & Sync" aria-current={page === "accounts" ? "page" : undefined} aria-describedby="connected-account-count" onClick={() => onNavigate("accounts")} title={"Accounts & Sync · " + connectionSummary}><ArrowLeftRight size={18} /><span>Accounts & Sync</span><small className="connected-count" aria-hidden="true">{connectedCount}</small></button>
       </nav>
       <p className="sr-only" id="connected-account-count" role="status">{connectionSummary}</p>
-      <div className="sidebar-bottom"><div className="local-note"><ShieldCheck size={18} /><div><strong>Your accounts. Your control.</strong><p>Credentials are kept in your system’s secure credential store.</p></div></div><span className="version">THREADLINE / 0.1.0</span></div>
+      <div className="sidebar-bottom"><div className="local-note"><ShieldCheck size={18} /><div><strong>Your accounts. Your control.</strong><p>Credentials are kept in your system’s secure credential store.</p></div></div><span className="version">THREADLINE / {packageJson.version}</span></div>
     </aside>
     <div className="app-content">
       {page === "accounts" && <header className="topbar"><span className="muted">{mode === "BROWSER" ? "Browser preview" : "Your connected identities"}</span><button className="button button-blue" onClick={onCompose}><Plus size={16} />Compose</button></header>}

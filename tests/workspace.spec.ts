@@ -85,6 +85,7 @@ test("first real connection opens Timeline and exposes the approved workspace hi
   await page.getByRole("button", { name: "Connect account" }).click();
   await expect(page.getByRole("heading", { name: "Timeline", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation").locator(".nav-item > span")).toHaveText(["Notifications", "My profiles", "Timeline", "Discover", "Following", "Composer", "Accounts & Sync"]);
+  await expect(page.locator(".sidebar-bottom .version")).toHaveText("THREADLINE / 0.1.1");
   await page.getByRole("button", { name: "Composer", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
   await expect(page.locator(".destination-chip")).toHaveCount(1);
