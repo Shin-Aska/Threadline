@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { Account, CanonicalPost } from "../src/types";
+import type { SaveDraftInput } from "../src/types/publishing";
 const connected: Account = {
   id: "bsky-did:plc:qa", provider: "BLUESKY", displayName: "Test writer", handle: "writer.bsky.social", instanceUrl: null, did: null,
   capabilities: { maxTextLength: 300, countingPolicy: "GRAPHEME", reservedUrlLength: null, maxMediaAttachments: 4, supportedMediaTypes: [], supportsPolls: false, supportsContentWarnings: false },
@@ -10,11 +11,12 @@ async function installDesktop(page: Page, scenario: "connect" | "ready" | "previ
     let accounts = scenario === "connect" || scenario === "connect-error" ? [] : [scenario === "custom-service" ? { ...connected, instanceUrl: "https://custom-pds.example" } : connected];
     if (scenario === "publish-partial" || scenario === "publish-partial-thread") accounts.push({ ...connected, id: "bsky-second", handle: "second.bsky.social" });
     let publishAttempts = 0;
+    let savedDraft: { id: string; revision: number; post: CanonicalPost; createdAtEpochMs: number; updatedAtEpochMs: number } | null = null;
     let live = scenario !== "disconnected" && scenario !== "custom-service";
     let previewAttempts = 0; let workspaceUnavailable = scenario === "workspace-error";
     window.addEventListener("qa-workspace-recovered", () => { workspaceUnavailable = false; });
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {
-      invoke: async (command: string, args: { post?: CanonicalPost; accountId?: string } = {}) => {
+      invoke: async (command: string, args: { post?: CanonicalPost; accountId?: string; input?: SaveDraftInput; id?: string } = {}) => {
         if (command === "list_accounts") return accounts;
         if (command === "get_workspace") {
           if (workspaceUnavailable) throw new Error("Workspace temporarily unavailable");
@@ -33,12 +35,22 @@ async function installDesktop(page: Page, scenario: "connect" | "ready" | "previ
           if (!post) throw new Error("Missing post");
           return { graphemeCount: post.text.length, effectiveLimit: null, limitingAccountId: null, destinations: post.destinationAccountIds.map(accountId => ({ accountId, label: "Bluesky", maxLength: 300, parts: [post.text] })) };
         }
-        if (command === "publish_post") {
+        if (command === "list_drafts") return savedDraft ? [savedDraft] : [];
+        if (command === "list_schedules" || command === "list_publications") return [];
+        if (command === "get_notifications") return { notifications: [], cursor: null };
+        if (command === "save_draft") {
+          if (!args.input) throw new Error("Missing draft input");
+          savedDraft = { id: savedDraft?.id ?? "qa-draft", revision: (savedDraft?.revision ?? 0) + 1, post: args.input.post, createdAtEpochMs: savedDraft?.createdAtEpochMs ?? Date.now(), updatedAtEpochMs: Date.now() };
+          return savedDraft;
+        }
+        if (command === "publish_draft") {
           localStorage.setItem("qa-publish-count", String(++publishAttempts));
           if (scenario === "publish-slow") await new Promise<void>(resolve => window.addEventListener("qa-release-publish", () => resolve(), { once: true }));
-          if (scenario === "publish-failed" || scenario === "publish-partial" || scenario === "publish-partial-thread") return { canonicalId: "qa-failed", publications: accounts.map((account, index) => ({ accountId: account.id, status: scenario !== "publish-failed" && index === 0 ? "PUBLISHED" : "FAILED", remotePostIds: scenario === "publish-partial-thread" || (scenario === "publish-partial" && index === 0) ? ["test:1"] : [], error: index === 0 && scenario !== "publish-failed" ? null : "Provider unavailable" })) };
+          const post = savedDraft?.post;
+          if (!post || !savedDraft) throw new Error("Missing saved draft");
+          if (scenario === "publish-failed" || scenario === "publish-partial" || scenario === "publish-partial-thread") return { id: "qa-failed", draftId: savedDraft.id, draftRevision: savedDraft.revision, post, createdAtEpochMs: Date.now(), completedAtEpochMs: Date.now(), destinations: accounts.map((account, index) => ({ accountId: account.id, status: scenario !== "publish-failed" && index === 0 ? "PUBLISHED" : "FAILED", remotePostIds: scenario === "publish-partial-thread" || (scenario === "publish-partial" && index === 0) ? ["test:1"] : [], error: index === 0 && scenario !== "publish-failed" ? null : "Provider unavailable", segments: [] })) };
           if (scenario === "publish-error") throw new Error("Provider rejected publication");
-          return { canonicalId: "qa-publication", publications: accounts.map(account => ({ accountId: account.id, status: "PUBLISHED", remotePostIds: ["test:1"], error: null })) };
+          return { id: "qa-publication", draftId: savedDraft.id, draftRevision: savedDraft.revision, post, createdAtEpochMs: Date.now(), completedAtEpochMs: Date.now(), destinations: accounts.map(account => ({ accountId: account.id, status: "PUBLISHED", remotePostIds: ["test:1"], error: null, segments: [] })) };
         }
         throw new Error(`Unexpected command: ${command}`);
       },
@@ -58,21 +70,22 @@ test("fresh browser opens setup without sample accounts or composer", async ({ p
   await expect(page.getByRole("navigation")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Connect account" })).toBeDisabled();
   await page.getByRole("button", { name: "Mastodon ActivityPub" }).click();
-  await expect(page.getByLabel("Instance URL")).toHaveValue("https://mastodon.social");
-  await page.getByLabel("Instance URL").fill("");
-  await page.getByLabel("Instance URL").pressSequentially("https://m");
-  await expect(page.getByLabel("Instance URL")).toHaveValue("https://m");
+  await expect(page.getByLabel("Instance URL", { exact: true })).toHaveValue("https://mastodon.social");
+  await page.getByLabel("Instance URL", { exact: true }).fill("");
+  await page.getByLabel("Instance URL", { exact: true }).pressSequentially("https://m");
+  await expect(page.getByLabel("Instance URL", { exact: true })).toHaveValue("https://m");
   await expect(page.getByLabel("Access token", { exact: true })).toBeVisible();
 });
 
-test("first real connection opens Timeline and keeps an empty composer ready", async ({ page }) => {
+test("first real connection opens Timeline and exposes the approved workspace hierarchy", async ({ page }) => {
   await installDesktop(page, "connect"); await page.goto("/");
   await expect(page.getByRole("heading", { name: "Connect your first account" })).toBeVisible();
   await page.getByLabel("Handle", { exact: true }).fill("writer.bsky.social");
   await page.getByLabel("App password", { exact: true }).fill("test-only-password");
   await page.getByRole("button", { name: "Connect account" }).click();
   await expect(page.getByRole("heading", { name: "Timeline", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation").locator(".nav-item > span")).toHaveText(["Timeline", "Discover", "Following", "Composer", "Accounts & Sync"]);
+  await expect(page.getByRole("navigation").locator(".nav-item > span")).toHaveText(["Notifications", "My profiles", "Timeline", "Discover", "Following", "Composer", "Accounts & Sync"]);
+  await expect(page.locator(".sidebar-bottom .version")).toHaveText("THREADLINE / 0.1.1");
   await page.getByRole("button", { name: "Composer", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Post text" })).toHaveValue("");
   await expect(page.locator(".destination-chip")).toHaveCount(1);

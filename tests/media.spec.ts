@@ -1,23 +1,28 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { CanonicalPost } from "../src/types";
+import type { SaveDraftInput } from "../src/types/publishing";
 import { readFileSync } from "node:fs";
 const image = { name: "threadline.png", mimeType: "image/png", buffer: readFileSync("src-tauri/icons/icon.png") };
 async function setup(page: Page, failure = false) {
   await page.addInitScript(({ failure }) => {
     const account = { id: "image-test", provider: "BLUESKY", displayName: "Test writer", handle: "writer.test", capabilities: { maxTextLength: 300, maxMediaAttachments: 4, supportedMediaTypes: ["image/png"] } };
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: { invoke: async (command: string, args: { post?: CanonicalPost }) => {
+    let draft: { id: string; revision: number; post: CanonicalPost; createdAtEpochMs: number; updatedAtEpochMs: number } | null = null;
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: { invoke: async (command: string, args: { post?: CanonicalPost; input?: SaveDraftInput; id?: string }) => {
       if (command === "get_workspace") return { accounts: [account], connectedAccountIds: [account.id], mode: "LIVE" };
+      if (command === "list_drafts" || command === "list_schedules" || command === "list_publications") return [];
+      if (command === "save_draft") { const now = Date.now(); draft = { id: "media-draft", revision: (draft?.revision ?? 0) + 1, post: args.input!.post, createdAtEpochMs: draft?.createdAtEpochMs ?? now, updatedAtEpochMs: now }; return draft; }
+      if (command === "publish_draft") {
+        if (!draft) throw new Error("Missing draft");
+        sessionStorage.setItem("published-draft", JSON.stringify(draft.post));
+        await new Promise<void>(resolve => window.addEventListener("release-publish", () => resolve(), { once: true }));
+        return { id: "media-publication", draftId: draft.id, draftRevision: draft.revision, post: draft.post, createdAtEpochMs: Date.now(), completedAtEpochMs: Date.now(), destinations: [{ accountId: account.id, status: failure ? "FAILED" : "PUBLISHED", remotePostIds: failure ? [] : ["qa:1"], error: failure ? "Upload rejected" : null, segments: [] }] };
+      }
       const post = args.post;
       if (!post) throw new Error("Missing post");
       if (command === "preview_post") {
         if (post.media.some(image => image.dataBase64)) throw new Error("Preview should not transfer image bytes");
         return { graphemeCount: post.text.length, destinations: [{ accountId: account.id, parts: [post.text] }] };
-      }
-      if (command === "publish_post") {
-        sessionStorage.setItem("published-draft", JSON.stringify(post));
-        await new Promise<void>(resolve => window.addEventListener("release-publish", () => resolve(), { once: true }));
-        return { canonicalId: "qa", publications: [{ accountId: account.id, status: failure ? "FAILED" : "PUBLISHED", remotePostIds: failure ? [] : ["qa:1"], error: failure ? "Upload rejected" : null }] };
       }
       throw new Error(command);
     } } });

@@ -76,7 +76,7 @@ export function HashtagSuggestions({ query, accountIds, workspace, editor, text,
       {filters.map(item => <button type="button" className="hashtag-filter" aria-pressed={filter === item.value} key={item.value} onMouseDown={event => event.preventDefault()} onClick={() => { setFilter(item.value); setExpandedKey(null); editor.current?.focus(); }} >{item.value !== "ALL" && <ProviderIcon provider={item.value} />}{item.label}</button>)}
       <button type="button" className="hashtag-close" aria-label="Dismiss hashtag suggestions" onClick={() => { onClose(); editor.current?.focus(); }}><X size={14} /></button>
     </div>
-    <div className="hashtag-scroll">
+    <div className="hashtag-scroll" tabIndex={0}>
       <div role="listbox" id={listId} aria-label="Hashtag suggestions">
         {options.map((row, index) => { const activity = hashtagActivity(row); return <div role="option" id={listId + "-" + index} aria-selected={selectedIndex === index} aria-label={"#" + row.name + ", " + activity.label + ", " + row.sources.length + " accounts"} className="hashtag-option" key={row.name} title={activity.detail} aria-description={activity.detail} onMouseDown={event => event.preventDefault()} onMouseMove={() => setCursor({ key, name: row.name })} onClick={() => onChoose(row.name)}>
           <strong>#{row.name}</strong><AccountStack accounts={row.sources.map(source => source.account)} /><span className="hashtag-count">{activity.label}</span>{selectedIndex === index && <CornerDownLeft size={14} />}

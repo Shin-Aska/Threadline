@@ -11,17 +11,21 @@ export async function setupMulti(page: Page, scenario = "ready") {
       { id: "m2", provider: "MASTODON", displayName: "Creative Corner", handle: "creative@mastodon.test" },
     ].map(account => ({ ...account, instanceUrl: account.provider === "BLUESKY" ? "https://bsky.social" : "https://mastodon.test", capabilities: { maxTextLength: account.id === "m2" ? 600 : account.provider === "BLUESKY" ? 300 : 500, maxMediaAttachments: 4, supportedMediaTypes: [] } }));
     let failed = false;
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: { invoke: async (command: string, args: { accountId?: string; query?: string; post?: { text: string; destinationAccountIds: string[] } }) => {
+    let draft: { id: string; revision: number; post: { text: string; destinationAccountIds: string[] }; createdAtEpochMs: number; updatedAtEpochMs: number } | null = null;
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: { invoke: async (command: string, args: { accountId?: string; query?: string; post?: { text: string; destinationAccountIds: string[] }; input?: { post: { text: string; destinationAccountIds: string[] } }; id?: string }) => {
       if (command === "get_workspace") return { accounts, connectedAccountIds: accounts.map(a => a.id), mode: "LIVE" };
+      if (command === "list_drafts" || command === "list_schedules" || command === "list_publications") return [];
+      if (command === "save_draft") { const now = Date.now(); draft = { id: "multi-draft", revision: (draft?.revision ?? 0) + 1, post: args.input!.post, createdAtEpochMs: draft?.createdAtEpochMs ?? now, updatedAtEpochMs: now }; return draft; }
+      if (command === "publish_draft") {
+        if (!draft) throw new Error("Missing draft");
+        sessionStorage.setItem("published-ids", JSON.stringify(draft.post.destinationAccountIds));
+        return { id: "multi-publication", draftId: draft.id, draftRevision: draft.revision, post: draft.post, createdAtEpochMs: Date.now(), completedAtEpochMs: Date.now(), destinations: draft.post.destinationAccountIds.map(accountId => ({ accountId, status: "PUBLISHED", remotePostIds: ["fixture"], error: null, segments: [] })) };
+      }
       if (command === "preview_post") return { graphemeCount: args.post?.text.length ?? 0, destinations: accounts.filter(a => args.post?.destinationAccountIds.includes(a.id)).map(a => ({ accountId: a.id, parts: scenario === "variants" && a.id === "m1" ? ["First part", "Second part"] : [args.post?.text ?? ""] })) };
       if (command === "lookup_hashtags") {
         if (scenario === "error" && args.accountId === "m1" && !failed) { failed = true; throw new Error("Search unavailable"); }
         if (args.accountId?.startsWith("b")) return args.query ? [{ name: args.query, activity: { kind: "BLUESKY", matches: 1100 } }] : [];
         return ["dra", "drawing", "drama", "dragon", "drawings", "digitalart", "drafting", "draw"].map((name, index) => ({ name, activity: { kind: "MASTODON", uses: 40 - index, days: 7 } }));
-      }
-      if (command === "publish_post") {
-        sessionStorage.setItem("published-ids", JSON.stringify(args.post?.destinationAccountIds));
-        return { canonicalId: "fixture", publications: args.post?.destinationAccountIds.map(accountId => ({ accountId, status: "PUBLISHED", remotePostIds: ["fixture"], error: null })) };
       }
       throw new Error(command);
     } } });

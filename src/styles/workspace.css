@@ -72,6 +72,7 @@
 .composer-page .policy small { color: var(--text-secondary); font-size: var(--font-caption); line-height: 1.6; margin-top: var(--space-2); }
 .composer-page .dispatch-bar { position: static; display: flex; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-6) 0 0; border: 0; border-top: 1px solid var(--composer-edge); border-radius: 0; background: transparent; backdrop-filter: none; box-shadow: none; }
 .composer-page .dispatch-bar>div { flex: 1; min-width: 150px; font-family: inherit; font-size: var(--font-caption); line-height: 1.6; color: var(--text-secondary); }
+.composer-page .dispatch-bar>.heading-actions { flex: 0 1 auto; justify-content: flex-end; flex-wrap: wrap; }
 .composer-page .publish-button { min-height: 56px; padding: var(--space-4) var(--space-6); margin-left: auto; border-radius: var(--composer-radius); background: var(--blue); color: var(--inset); font-size: var(--composer-copy); }
 .composer-page .publish-button:hover:not(:disabled) { background: var(--primary); }
 .composer-page .preview-column { display: flex; flex-direction: column; gap: var(--space-5); min-height: calc(100dvh - var(--workspace-header)); padding: var(--composer-padding) var(--space-5); border-left: 1px solid var(--edge); }

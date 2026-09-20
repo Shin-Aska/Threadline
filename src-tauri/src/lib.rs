@@ -9,7 +9,10 @@ pub mod error;
 pub mod hashtags;
 pub mod media;
 pub mod models;
+pub mod oauth;
 pub mod providers;
+pub mod publishing;
+pub mod scheduling;
 pub mod workspace;
 use credentials::{CredentialStore, OsKeychainCredentialStore};
 use database::Database;
@@ -19,6 +22,7 @@ pub struct AppState {
     pub database: Database,
     pub providers: RwLock<config::ProviderMap>,
     pub credentials: Arc<dyn CredentialStore>,
+    pub oauth: oauth::coordinator::OAuthCoordinator,
 }
 #[cfg(target_os = "linux")]
 fn configure_linux_webkit() {
@@ -50,15 +54,24 @@ pub fn run() {
             std::fs::create_dir_all(&dir)?;
             let db = Database::open(&dir.join("threadline.sqlite"))
                 .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            db.recover_interrupted_publications()
+                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            db.mark_startup_missed(database::publishing::now_epoch_ms())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
             let credentials: Arc<dyn CredentialStore> = Arc::new(OsKeychainCredentialStore);
-            let providers =
-                workspace::initialize(&db, credentials.as_ref(), config::live_accounts())
-                    .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            let providers = tauri::async_runtime::block_on(workspace::initialize(
+                &db,
+                Arc::clone(&credentials),
+                config::live_accounts(),
+            ))
+            .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
             app.manage(AppState {
                 database: db,
                 providers: RwLock::new(providers),
                 credentials,
+                oauth: oauth::coordinator::OAuthCoordinator::default(),
             });
+            tauri::async_runtime::spawn(scheduling::run(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -71,9 +84,36 @@ pub fn run() {
             commands::connect_mastodon,
             commands::remove_account,
             commands::storage_health,
+            oauth::commands::connect_mastodon_oauth,
+            oauth::commands::connect_bluesky_oauth,
+            oauth::commands::cancel_oauth_login,
+            commands::publishing::save_draft,
+            commands::publishing::list_drafts,
+            commands::publishing::get_draft,
+            commands::publishing::delete_draft,
+            commands::publishing::publish_draft,
+            commands::publishing::list_publications,
+            commands::publishing::delete_publication,
+            commands::publishing::create_schedule,
+            commands::publishing::list_schedules,
+            commands::publishing::reschedule_publication,
+            commands::publishing::cancel_schedule,
+            commands::publishing::send_schedule_now,
             commands::browsing::get_timeline,
             commands::browsing::get_discovery,
-            commands::browsing::get_following_sources
+            commands::browsing::get_following_sources,
+            commands::browsing::get_home_feed,
+            commands::browsing::get_own_feed,
+            commands::browsing::get_own_profile,
+            commands::browsing::get_profile,
+            commands::browsing::get_profile_feed,
+            commands::browsing::get_thread,
+            commands::browsing::get_tag_feed,
+            commands::browsing::get_followed_sources,
+            commands::browsing::get_source_feed,
+            commands::browsing::get_notifications,
+            commands::browsing::mark_notifications_read,
+            commands::browsing::perform_social_action
         ])
         .run(tauri::generate_context!())
         .expect("error while running Threadline")

@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
+pub mod publishing;
+pub use publishing::*;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ProviderKind {
     Mastodon,
     Bluesky,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CountingPolicy {
     Grapheme,
@@ -19,6 +21,10 @@ pub struct PlatformCapabilities {
     pub reserved_url_length: Option<usize>,
     pub max_media_attachments: usize,
     pub supported_media_types: Vec<String>,
+    #[serde(default)]
+    pub max_video_bytes: Option<usize>,
+    #[serde(default)]
+    pub max_video_duration_ms: Option<u64>,
     pub supports_polls: bool,
     pub supports_content_warnings: bool,
 }
@@ -46,24 +52,28 @@ pub struct WorkspaceState {
     pub connected_account_ids: Vec<String>,
     pub mode: WorkspaceMode,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PublishingPolicy {
     CommonLimit,
     Adaptive,
     AlwaysThread,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaAttachment {
     pub id: String,
+    #[serde(default)]
+    pub name: String,
     pub mime_type: String,
     pub size_bytes: usize,
     pub alt_text: String,
     #[serde(default)]
     pub data_base64: String,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CanonicalPost {
     pub text: String,
@@ -92,6 +102,8 @@ pub struct PublishingPreview {
 pub enum PublicationStatus {
     Published,
     Failed,
+    Uncertain,
+    Blocked,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

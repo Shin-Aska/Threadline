@@ -23,6 +23,7 @@ fn test_state(accounts: &[Account]) -> AppState {
         database,
         providers: RwLock::new(ProviderMap::new()),
         credentials: Arc::new(UnusedCredentials),
+        oauth: crate::oauth::coordinator::OAuthCoordinator::default(),
     }
 }
 fn post(accounts: &[Account]) -> CanonicalPost {
@@ -44,7 +45,7 @@ async fn missing_real_credentials_fail_publication() {
         .expect("result");
     assert!(matches!(
         result.publications[0].status,
-        PublicationStatus::Failed
+        PublicationStatus::Blocked
     ));
     assert!(result.publications[0].remote_post_ids.is_empty());
 }
@@ -58,7 +59,7 @@ async fn unconnected_legacy_accounts_cannot_report_published() {
     assert_eq!(result.publications.len(), 3);
     assert!(result.publications.iter().all(|publication| matches!(
         publication.status,
-        PublicationStatus::Failed
+        PublicationStatus::Blocked
     ) && publication
         .remote_post_ids
         .is_empty()));

@@ -1,11 +1,10 @@
 mod account_identity;
 pub mod browsing;
-use crate::providers::SocialProvider;
+pub mod publishing;
 use crate::providers::{bluesky::BlueskyProvider, mastodon::MastodonProvider};
 use crate::{composer, error::AppError, models::*, AppState};
 use std::sync::Arc;
 use tauri::State;
-use uuid::Uuid;
 #[tauri::command]
 pub fn list_accounts(state: State<'_, AppState>) -> Result<Vec<Account>, AppError> {
     state.database.accounts()
@@ -29,42 +28,37 @@ pub async fn publish_to_accounts(
     post: CanonicalPost,
     state: &AppState,
 ) -> Result<PublishResult, AppError> {
-    let workspace = crate::workspace::snapshot(state)?;
-    let p = composer::preview(&post, &workspace.accounts)?;
-    let media = crate::media::prepare(&post.media)?;
-    let providers = state
-        .providers
-        .read()
-        .map_err(|_| AppError::StateUnavailable)?
-        .clone();
-    let mut publications = Vec::with_capacity(p.destinations.len());
-    for destination in p.destinations {
-        let Some(provider) = providers.get(&destination.account_id) else {
-            publications.push(Publication {
-                account_id: destination.account_id,
-                status: PublicationStatus::Failed,
-                remote_post_ids: Vec::new(),
-                error: Some("Account is not connected; reconnect it in Accounts".into()),
-            });
-            continue;
-        };
-        publications.push(
-            publish_destination(
-                destination.account_id,
-                &destination.parts,
-                &media,
-                provider.as_ref(),
-            )
-            .await,
-        );
-    }
+    let draft = state.database.save_draft(SaveDraftInput {
+        id: None,
+        expected_revision: None,
+        post,
+    })?;
+    let result = crate::publishing::publish_draft(state, &draft.id).await?;
+    let canonical_id = result.id;
+    let publications = result
+        .destinations
+        .into_iter()
+        .map(|destination| Publication {
+            account_id: destination.account_id,
+            status: match destination.status {
+                PublicationOutcome::Published => PublicationStatus::Published,
+                PublicationOutcome::Failed => PublicationStatus::Failed,
+                PublicationOutcome::Uncertain
+                | PublicationOutcome::Pending
+                | PublicationOutcome::InFlight => PublicationStatus::Uncertain,
+                PublicationOutcome::Blocked => PublicationStatus::Blocked,
+            },
+            remote_post_ids: destination.remote_post_ids,
+            error: destination.error,
+        })
+        .collect();
     Ok(PublishResult {
-        canonical_id: Uuid::new_v4().to_string(),
+        canonical_id,
         publications,
     })
 }
 
-fn default_capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapabilities {
+pub(crate) fn default_capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapabilities {
     PlatformCapabilities {
         max_text_length,
         counting_policy: CountingPolicy::Grapheme,
@@ -76,12 +70,14 @@ fn default_capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapab
             "image/webp".into(),
             "video/mp4".into(),
         ],
+        max_video_bytes: (!mastodon).then_some(300_000_000),
+        max_video_duration_ms: None,
         supports_polls: mastodon,
         supports_content_warnings: mastodon,
     }
 }
 
-fn remove_mock_accounts(state: &AppState) -> Result<(), AppError> {
+pub(crate) fn remove_mock_accounts(state: &AppState) -> Result<(), AppError> {
     if state
         .providers
         .read()
@@ -104,7 +100,7 @@ pub async fn connect_bluesky(
 ) -> Result<Account, AppError> {
     connect_bluesky_account(service_url, identifier, app_password, &state).await
 }
-async fn connect_bluesky_account(
+pub(crate) async fn connect_bluesky_account(
     service_url: String,
     identifier: String,
     app_password: String,
@@ -116,12 +112,13 @@ async fn connect_bluesky_account(
         ));
     }
     let provider = BlueskyProvider {
-        search_session: Default::default(),
+        app_password_session: Default::default(),
         capabilities: default_capabilities(300, false),
         client: reqwest::Client::new(),
         service_url,
         identifier,
         app_password,
+        oauth: None,
     };
     let (did, handle) = provider.account().await?;
     let account = Account {
@@ -156,18 +153,27 @@ pub async fn connect_mastodon(
     access_token: String,
     state: State<'_, AppState>,
 ) -> Result<Account, AppError> {
+    connect_mastodon_account(base_url, access_token, &state).await
+}
+
+pub(crate) async fn connect_mastodon_account(
+    base_url: String,
+    access_token: String,
+    state: &AppState,
+) -> Result<Account, AppError> {
     if base_url.trim().is_empty() || access_token.trim().is_empty() {
         return Err(AppError::Validation(
             "Mastodon server and access token are required".into(),
         ));
     }
-    let provider = MastodonProvider {
+    let mut provider = MastodonProvider {
         capabilities: default_capabilities(500, true),
         client: reqwest::Client::new(),
         base_url: base_url.trim_end_matches('/').to_owned(),
         access_token,
     };
     let (remote_id, handle, display_name) = provider.account().await?;
+    provider.capabilities = provider.discovered_capabilities().await;
     let account = Account {
         id: account_identity::mastodon_account_id(
             &provider.base_url,
@@ -187,7 +193,7 @@ pub async fn connect_mastodon(
     })
     .map_err(|error| AppError::Credential(error.to_string()))?;
     state.credentials.set(&account.id, &credential)?;
-    remove_mock_accounts(&state)?;
+    remove_mock_accounts(state)?;
     state.database.upsert_account(&account)?;
     state
         .providers
@@ -209,49 +215,6 @@ pub fn remove_account(account_id: String, state: State<'_, AppState>) -> Result<
     Ok(())
 }
 
-async fn publish_destination(
-    account_id: String,
-    parts: &[String],
-    media: &[PreparedMedia],
-    provider: &dyn SocialProvider,
-) -> Publication {
-    let mut published = Vec::new();
-    let mut parent = None;
-    for (index, text) in parts.iter().enumerate() {
-        let post = PreparedPost {
-            text: text.clone(),
-            media: if index == 0 {
-                media.to_vec()
-            } else {
-                Vec::new()
-            },
-        };
-        let result = match parent.as_ref() {
-            Some(parent) => provider.reply(parent, post).await,
-            None => provider.publish(post).await,
-        };
-        match result {
-            Ok(remote) => {
-                published.push(remote.remote_id.clone());
-                parent = Some(remote);
-            }
-            Err(error) => {
-                return Publication {
-                    account_id,
-                    status: PublicationStatus::Failed,
-                    remote_post_ids: published,
-                    error: Some(error.to_string()),
-                };
-            }
-        }
-    }
-    Publication {
-        account_id,
-        status: PublicationStatus::Published,
-        remote_post_ids: published,
-        error: None,
-    }
-}
 #[tauri::command]
 pub fn storage_health() -> String {
     "SQLite ready; credentials delegated to OS keychain".into()

@@ -1,33 +1,54 @@
 use crate::{error::AppError, models::*};
 use rusqlite::{params, Connection};
-use std::{path::Path, sync::Mutex};
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
+pub(crate) mod notifications;
+pub(crate) mod publishing;
 pub struct Database {
     connection: Mutex<Connection>,
+    media_root: PathBuf,
+    remove_media_on_drop: bool,
 }
 impl Database {
     pub fn open(path: &Path) -> Result<Self, AppError> {
         let c = Connection::open(path)?;
+        let media_root = path.with_extension("media");
+        std::fs::create_dir_all(&media_root)
+            .map_err(|error| AppError::Storage(error.to_string()))?;
         let db = Self {
             connection: Mutex::new(c),
+            media_root,
+            remove_media_on_drop: false,
         };
         db.initialize()?;
         Ok(db)
     }
     pub fn in_memory() -> Result<Self, AppError> {
         let c = Connection::open_in_memory()?;
+        let media_root =
+            std::env::temp_dir().join(format!("threadline-media-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&media_root)
+            .map_err(|error| AppError::Storage(error.to_string()))?;
         let db = Self {
             connection: Mutex::new(c),
+            media_root,
+            remove_media_on_drop: true,
         };
         db.initialize()?;
         Ok(db)
     }
-    fn connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AppError> {
+    pub(crate) fn connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AppError> {
         self.connection
             .lock()
             .map_err(|_| AppError::StateUnavailable)
     }
     fn initialize(&self) -> Result<(), AppError> {
-        self.connection()?.execute_batch("CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, provider TEXT NOT NULL, handle TEXT NOT NULL, display_name TEXT NOT NULL, instance_url TEXT, did TEXT, capabilities_json TEXT NOT NULL, settings_json TEXT NOT NULL DEFAULT '{}'); CREATE TABLE IF NOT EXISTS canonical_posts (id TEXT PRIMARY KEY, text TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS publications (id INTEGER PRIMARY KEY, canonical_id TEXT NOT NULL, account_id TEXT NOT NULL, status TEXT NOT NULL, remote_ids_json TEXT NOT NULL, error TEXT);")?;
+        self.connection()?.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, provider TEXT NOT NULL, handle TEXT NOT NULL, display_name TEXT NOT NULL, instance_url TEXT, did TEXT, capabilities_json TEXT NOT NULL, settings_json TEXT NOT NULL DEFAULT '{}'); CREATE TABLE IF NOT EXISTS canonical_posts (id TEXT PRIMARY KEY, text TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS publications (id INTEGER PRIMARY KEY, canonical_id TEXT NOT NULL, account_id TEXT NOT NULL, status TEXT NOT NULL, remote_ids_json TEXT NOT NULL, error TEXT);")?;
+        self.initialize_publishing()?;
+        self.initialize_notification_reads()?;
+        self.cleanup_orphaned_media()?;
         Ok(())
     }
     pub fn seed(&self, accounts: &[Account]) -> Result<(), AppError> {
@@ -96,7 +117,6 @@ impl Database {
     /// This function relies on:
     /// - The `rusqlite` crate for database operations.
     /// - The `serde_json` crate for deserializing JSON strings in the `capabilities` field.
-    /// ```
     pub fn accounts(&self) -> Result<Vec<Account>, AppError> {
         let c = self.connection()?;
         let mut s=c.prepare("SELECT id,provider,handle,display_name,instance_url,did,capabilities_json FROM accounts ORDER BY rowid")?;
@@ -126,6 +146,13 @@ impl Database {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 }
+impl Drop for Database {
+    fn drop(&mut self) {
+        if self.remove_media_on_drop {
+            let _ = std::fs::remove_dir_all(&self.media_root);
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,3 +163,5 @@ mod tests {
         assert_eq!(db.accounts().expect("accounts").len(), 3)
     }
 }
+#[cfg(test)]
+mod publishing_tests;

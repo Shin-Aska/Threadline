@@ -13,7 +13,7 @@ async fn read_media(response: reqwest::Response) -> Result<UploadedMedia, AppErr
     let status = response.status();
     if !status.is_success() {
         return Err(AppError::Provider(format!(
-            "Mastodon image upload returned {status}"
+            "Mastodon media upload returned {status}"
         )));
     }
     response
@@ -23,17 +23,17 @@ async fn read_media(response: reqwest::Response) -> Result<UploadedMedia, AppErr
 }
 
 impl MastodonProvider {
-    pub(super) async fn upload_images(
+    pub(super) async fn upload_media(
         &self,
-        images: &[PreparedMedia],
+        media_items: &[PreparedMedia],
     ) -> Result<Vec<String>, AppError> {
-        let mut ids = Vec::with_capacity(images.len());
-        for image in images {
-            let extension = image.mime_type.strip_prefix("image/").unwrap_or("bin");
-            let file = reqwest::multipart::Part::bytes(image.data.to_vec())
-                .file_name(format!("image.{extension}"))
-                .mime_str(&image.mime_type)
-                .map_err(|_| AppError::Validation("unsupported image type".into()))?;
+        let mut ids = Vec::with_capacity(media_items.len());
+        for media in media_items {
+            let extension = media.mime_type.split('/').nth(1).unwrap_or("bin");
+            let file = reqwest::multipart::Part::bytes(media.data.to_vec())
+                .file_name(format!("attachment.{extension}"))
+                .mime_str(&media.mime_type)
+                .map_err(|_| AppError::Validation("unsupported media type".into()))?;
             let response = self
                 .client
                 .post(format!(
@@ -45,15 +45,31 @@ impl MastodonProvider {
                 .multipart(
                     reqwest::multipart::Form::new()
                         .part("file", file)
-                        .text("description", image.alt_text.clone()),
+                        .text("description", media.alt_text.clone()),
                 )
                 .send()
                 .await
                 .map_err(|error| {
-                    AppError::Provider(format!("Mastodon image upload failed: {error}"))
+                    AppError::Provider(format!("Mastodon media upload failed: {error}"))
                 })?;
+            if !response.status().is_success() {
+                let media_kind = if media.mime_type == "video/mp4" {
+                    "video"
+                } else {
+                    "image"
+                };
+                return Err(AppError::Provider(format!(
+                    "Mastodon {media_kind} upload returned {}",
+                    response.status()
+                )));
+            }
             let mut uploaded = read_media(response).await?;
-            for _ in 0..30 {
+            let processing_attempts = if media.mime_type == "video/mp4" {
+                600
+            } else {
+                30
+            };
+            for _ in 0..processing_attempts {
                 if uploaded.url.is_some() {
                     break;
                 }
@@ -71,7 +87,7 @@ impl MastodonProvider {
                     .await
                     .map_err(|error| {
                         AppError::Provider(format!(
-                            "Mastodon image processing check failed: {error}"
+                            "Mastodon media processing check failed: {error}"
                         ))
                     })?;
                 if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
@@ -80,7 +96,7 @@ impl MastodonProvider {
                 uploaded = read_media(response).await?;
             }
             if uploaded.url.is_none() {
-                return Err(AppError::Provider("Mastodon is still processing an image. Your post was not sent; try again shortly.".into()));
+                return Err(AppError::Provider("Mastodon is still processing media. Your post was not sent; try again shortly.".into()));
             }
             ids.push(uploaded.id);
         }
