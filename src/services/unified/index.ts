@@ -15,7 +15,8 @@ export async function getUnifiedDiscovery(accounts: readonly Account[], signal?:
   const settled = await Promise.all(accounts.map(async account => { try { return { account, value: await desktopApi.social.discovery(account.id, signal) }; } catch (error) { return { account, error: error instanceof Error ? error.message : String(error) }; } }));
   const values = settled.flatMap(item => item.value ? [item.value] : []);
   const result: UnifiedDiscoveryResult = { topics: mergeTopics(values.flatMap(value => value.topics)), suggestedAccounts: [...new Map(values.flatMap(value => value.suggestedAccounts).map(actor => [actor.id, actor])).values()], popularPosts: mergePosts(values.map(value => ({ posts: value.popularPosts, cursor: null }))) };
-  return { result, failures: settled.flatMap(item => item.error ? [{ accountId: item.account.id, provider: item.account.provider, message: item.error }] : []) };
+  const suggestedAccountIds = Object.fromEntries(settled.flatMap(item => item.value?.suggestedAccounts.map(actor => [actor.id, item.account.id]) ?? []));
+  return { result, suggestedAccountIds, failures: settled.flatMap(item => item.error ? [{ accountId: item.account.id, provider: item.account.provider, message: item.error }] : []) };
 }
 export async function getUnifiedFollowing(accounts: readonly Account[], signal?: AbortSignal) {
   const settled = await Promise.all(accounts.map(async account => { try { return await desktopApi.social.following(account.id, signal); } catch { return [] as UnifiedSource[]; } }));

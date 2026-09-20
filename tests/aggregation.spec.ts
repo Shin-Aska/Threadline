@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { FollowingCollection, UnifiedFeedPage, UnifiedPost, UnifiedTopic } from "../src/types";
+import type { SocialPost } from "../src/types/social";
 import { collectionPosts, filterPosts, mergePosts, mergeTopics } from "../src/services/unified/aggregate";
+import { mergeSocialPosts, presentSocialPosts } from "../src/services/social/presentation";
 const post = (provider: "BLUESKY" | "MASTODON", id: string, accountId: string, createdAt = "2026-01-01T00:00:00Z"): UnifiedPost => ({ canonicalKey: `${provider}:${id}`, provider, remoteId: id, remoteUrl: `https://example.test/${id}`, author: { id: "actor", displayName: "Writer", handle: "writer", avatarUrl: null }, text: "same text", createdAt, media: [], sources: [{ accountId, accountHandle: accountId, provider }], metrics: {}, capabilities: { openOriginal: true, reply: false, like: false, repost: false } });
 const page = (...posts: UnifiedPost[]): UnifiedFeedPage => ({ posts, cursor: null });
 test("stable remote IDs deduplicate while retaining every Bluesky source", () => { const result = mergePosts([page(post("BLUESKY", "one", "a")), page(post("BLUESKY", "one", "b")), page(post("BLUESKY", "one", "c"))]); expect(result).toHaveLength(1); expect(result[0]!.sources.map(source => source.accountId)).toEqual(["a", "b", "c"]); });
@@ -9,3 +11,13 @@ test("providers merge chronologically but identical text across networks stays d
 test("source filters preserve individual attribution", () => { const merged = mergePosts([page(post("BLUESKY", "1", "a")), page(post("BLUESKY", "1", "b"))]); expect(filterPosts(merged, ["b"])[0]!.sources.map(source => source.accountId)).toEqual(["b"]); expect(filterPosts(merged, ["x"])).toEqual([]); });
 test("duplicate discovery topics merge case-insensitively across networks", () => { const topics: UnifiedTopic[] = [{ key: "a", name: "OpenSource", postCount: 2, sources: [post("BLUESKY", "1", "a").sources[0]!] }, { key: "b", name: "#opensource", postCount: 3, sources: [post("MASTODON", "2", "b").sources[0]!] }]; const merged = mergeTopics(topics); expect(merged).toHaveLength(1); expect(merged[0]!.postCount).toBe(5); expect(merged[0]!.sources).toHaveLength(2); });
 test("following collections accept heterogeneous source types", () => { const collection: FollowingCollection = { id: "design", title: "Design", description: "Mixed", sources: [{ id: "feed", provider: "BLUESKY", type: "FEED", title: "Feed", accountId: "a", remoteId: "feed" }, { id: "tag", provider: "MASTODON", type: "TOPIC", title: "#design", accountId: "b", remoteId: "design" }] }; expect(collectionPosts(collection, [post("BLUESKY", "1", "a"), post("MASTODON", "2", "b")])).toHaveLength(2); });
+
+const socialPost = (id: string, createdAt: string, likes: number, replies: number): SocialPost => ({ canonicalKey: `BLUESKY:${id}`, provider: "BLUESKY", remoteId: id, remoteCid: id, remoteUrl: `https://example.test/${id}`, author: { id: "actor", displayName: "Writer", handle: "writer.test", avatarUrl: null }, text: id, createdAt, media: [], metrics: { likes, replies, reposts: 0 }, viewer: { liked: false, reposted: false, likeUri: null, repostUri: null }, replyParentId: null, replyRootId: null, replyRootCid: null });
+test("loaded social posts retain per-account viewer state and support every approved order", () => {
+  const liked = { ...socialPost("one", "2026-01-01T01:00:00Z", 9, 1), viewer: { liked: true, reposted: false, likeUri: "like:one", repostUri: null } };
+  const merged = mergeSocialPosts([{ accountId: "a", posts: [liked] }, { accountId: "b", posts: [socialPost("one", "2026-01-01T01:00:00Z", 9, 1), socialPost("two", "2026-01-01T02:00:00Z", 3, 12)] }]);
+  expect(merged[0]!.observations.map(item => item.accountId)).toEqual(["a", "b"]);
+  expect(presentSocialPosts(merged, { query: "", mediaOnly: false, hideReposts: false, order: "OLDEST" }).map(item => item.post.remoteId)).toEqual(["one", "two"]);
+  expect(presentSocialPosts(merged, { query: "", mediaOnly: false, hideReposts: false, order: "LIKES" })[0]!.post.remoteId).toBe("one");
+  expect(presentSocialPosts(merged, { query: "", mediaOnly: false, hideReposts: false, order: "DISCUSSED" })[0]!.post.remoteId).toBe("two");
+});
