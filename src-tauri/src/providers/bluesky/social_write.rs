@@ -1,10 +1,12 @@
 use crate::{
     error::AppError,
-    models::PublishedPost,
-    providers::social::{SocialAction, SocialActionResult, ViewerState},
+    models::{ProviderKind, PublishedPost},
+    providers::social::{
+        Actor, PostMetrics, SocialAction, SocialActionResult, SocialPost, ViewerState,
+    },
 };
 
-use super::{native, normalize, BlueskyProvider, RecordResponse};
+use super::{native, BlueskyProvider, RecordResponse};
 
 impl BlueskyProvider {
     async fn create_social_record(
@@ -185,27 +187,61 @@ impl BlueskyProvider {
                 uri: parent.uri.clone(),
                 cid: parent.cid.clone(),
             });
+        let (did, handle) = match &self.oauth {
+            Some(oauth) => (oauth.subject().to_owned(), oauth.subject().to_owned()),
+            None => {
+                let session = self.session().await?;
+                (session.did, session.handle)
+            }
+        };
+        let created_at = crate::providers::now_iso8601();
         let published = self
             .create_record(
                 crate::models::PreparedPost {
-                    text,
+                    text: text.clone(),
                     media: Vec::new(),
                 },
                 Some(&PublishedPost {
-                    remote_id: parent.uri,
+                    remote_id: parent.uri.clone(),
                     remote_cid: Some(parent.cid),
-                    root_id: Some(root.uri),
-                    root_cid: Some(root.cid),
+                    root_id: Some(root.uri.clone()),
+                    root_cid: Some(root.cid.clone()),
                 }),
             )
             .await?;
-        let created = self.resolve_post(&published.remote_id).await?;
+        // The App View may not index this PDS write before the action returns.
+        let rkey = published.remote_id.rsplit('/').next().unwrap_or_default();
+        let created_post = SocialPost {
+            canonical_key: format!("BLUESKY:{}", published.remote_id),
+            provider: ProviderKind::Bluesky,
+            remote_id: published.remote_id.clone(),
+            remote_cid: published.remote_cid,
+            remote_url: format!("https://bsky.app/profile/{did}/post/{rkey}"),
+            author: Actor {
+                id: did,
+                display_name: handle.clone(),
+                handle,
+                avatar_url: None,
+            },
+            text,
+            created_at,
+            media: Vec::new(),
+            metrics: PostMetrics {
+                replies: Some(0),
+                reposts: Some(0),
+                likes: Some(0),
+            },
+            viewer: ViewerState::default(),
+            reply_parent_id: Some(parent.uri),
+            reply_root_id: Some(root.uri),
+            reply_root_cid: Some(root.cid),
+        };
         Ok(SocialActionResult {
             target_id: post_id,
             viewer: None,
             followed: None,
             record_id: Some(published.remote_id),
-            created_post: Some(normalize::post(created)),
+            created_post: Some(created_post),
         })
     }
 }
