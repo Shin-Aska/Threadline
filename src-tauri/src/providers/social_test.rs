@@ -173,3 +173,67 @@ async fn bluesky_like_resolves_post_cid_before_creating_record() {
     assert_eq!(body["record"]["subject"]["cid"], "trusted-cid");
     assert_eq!(body["collection"], "app.bsky.feed.like");
 }
+
+#[tokio::test]
+async fn bluesky_reply_returns_created_post_without_waiting_for_app_view() {
+    // Given a parent post and a successful PDS write, with no App View response for the new post.
+    let session = r#"{"accessJwt":"jwt","did":"did:plc:me","handle":"me.test"}"#;
+    let parent = r#"{"posts":[{"uri":"at://did:plc:alice/app.bsky.feed.post/parent","cid":"parent-cid","author":{"did":"did:plc:alice","handle":"alice.test"},"record":{"text":"Parent","createdAt":"2026-09-20T01:00:00Z","reply":{"root":{"uri":"at://did:plc:bob/app.bsky.feed.post/root","cid":"root-cid"},"parent":{"uri":"at://did:plc:bob/app.bsky.feed.post/root","cid":"root-cid"}}}}]}"#;
+    let created = r#"{"uri":"at://did:plc:me/app.bsky.feed.post/reply","cid":"reply-cid"}"#;
+    let (url, server) =
+        super::test_http::server(vec![(200, session), (200, parent), (200, created)]);
+
+    // When the selected account replies to a comment.
+    let result = bluesky(url)
+        .social_action(super::social::SocialAction::Reply {
+            post_id: "at://did:plc:alice/app.bsky.feed.post/parent".into(),
+            text: "My reply".into(),
+        })
+        .await
+        .expect("successful write must return a reply");
+
+    // Then the write response supplies the immediate post and no new-post App View read occurs.
+    let post = result.created_post.expect("created post");
+    assert_eq!(post.remote_id, "at://did:plc:me/app.bsky.feed.post/reply");
+    assert_eq!(post.remote_cid.as_deref(), Some("reply-cid"));
+    assert_eq!(post.text, "My reply");
+    assert_eq!(
+        post.reply_parent_id.as_deref(),
+        Some("at://did:plc:alice/app.bsky.feed.post/parent")
+    );
+    assert_eq!(
+        post.reply_root_id.as_deref(),
+        Some("at://did:plc:bob/app.bsky.feed.post/root")
+    );
+    let requests = server.join().expect("server");
+    assert_eq!(requests.len(), 3);
+    let body: serde_json::Value = serde_json::from_slice(&requests[2].body).expect("record body");
+    assert_eq!(body["record"]["reply"]["root"]["cid"], "root-cid");
+    assert_eq!(body["record"]["reply"]["parent"]["cid"], "parent-cid");
+}
+
+#[tokio::test]
+async fn bluesky_reply_still_reports_failed_create_record() {
+    let session = r#"{"accessJwt":"jwt","did":"did:plc:me","handle":"me.test"}"#;
+    let parent = r#"{"posts":[{"uri":"at://did:plc:alice/app.bsky.feed.post/parent","cid":"parent-cid","author":{"did":"did:plc:alice","handle":"alice.test"},"record":{"text":"Parent","createdAt":"2026-09-20T01:00:00Z"}}]}"#;
+    let (url, server) = super::test_http::server(vec![
+        (200, session),
+        (200, parent),
+        (424, r#"{"error":"UpstreamFailure"}"#),
+    ]);
+
+    let error = bluesky(url)
+        .social_action(super::social::SocialAction::Reply {
+            post_id: "at://did:plc:alice/app.bsky.feed.post/parent".into(),
+            text: "My reply".into(),
+        })
+        .await
+        .expect_err("failed write must not claim success");
+
+    assert!(error.to_string().contains("424"));
+    let requests = server.join().expect("server");
+    assert_eq!(requests.len(), 3);
+    assert!(requests[2]
+        .headers
+        .contains("com.atproto.repo.createRecord"));
+}
