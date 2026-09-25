@@ -28,6 +28,13 @@ const CONTENT_TTL_MS = 30_000;
 const NOTIFICATION_TTL_MS = 20_000;
 const REFERENCE_TTL_MS = 120_000;
 const cache = new SocialReadCache({ maxEntries: 96 });
+type SocialActionListener = (accountId: string, action: SocialAction, result: SocialActionResult) => void;
+const actionListeners = new Set<SocialActionListener>();
+
+export function subscribeSocialActions(listener: SocialActionListener): () => void {
+  actionListeners.add(listener);
+  return () => { actionListeners.delete(listener); };
+}
 
 const call = <T>(command: string, args: Readonly<Record<string, unknown>>): Promise<T> =>
   invoke<T>(command, args);
@@ -72,6 +79,9 @@ export const socialApi = {
     cachedCall({ accountId, command: "get_notifications", args: { accountId, cursor }, ttlMs: NOTIFICATION_TTL_MS, options }),
   markNotificationsRead: (accountId: string, notificationIds: readonly string[]): Promise<void> =>
     mutate(accountId, "mark_notifications_read", { accountId, notificationIds }),
-  act: (accountId: string, action: SocialAction): Promise<SocialActionResult> =>
-    mutate(accountId, "perform_social_action", { accountId, action }),
+  act: async (accountId: string, action: SocialAction): Promise<SocialActionResult> => {
+    const result = await mutate<SocialActionResult>(accountId, "perform_social_action", { accountId, action });
+    for (const listener of actionListeners) listener(accountId, action, result);
+    return result;
+  },
 } as const;
