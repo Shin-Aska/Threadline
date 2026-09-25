@@ -104,11 +104,40 @@ test("social actions use the chosen account and roll back provider failure", asy
   await page.goto("/");
   const card = page.locator(".unified-post");
   await card.getByLabel("Act as").selectOption("reader-two");
-  const like = card.getByRole("button").filter({ hasText: "3" }).last();
+  const like = card.locator("footer button").nth(2);
   await like.click();
   await expect(card.getByRole("alert")).toHaveText("Provider rejected the action");
   await expect(like).toHaveAttribute("aria-pressed", "false");
   expect(await page.evaluate(() => sessionStorage.getItem("acting-account"))).toBe("reader-two");
   await like.click();
   await expect(like).toHaveAttribute("aria-pressed", "true");
+  await expect(like).toContainText("4");
+});
+
+test("successful heart updates the visible count without refreshing", async ({ page }) => {
+  await page.goto("/tests/fixtures/complete-workspace.html");
+  const card = page.locator(".unified-page:visible .unified-post").first();
+  const heart = card.locator("footer button").nth(2);
+  await expect(heart).toContainText("24");
+  await heart.click();
+  await expect(heart).toHaveAttribute("aria-pressed", "true");
+  await expect(heart).toContainText("25");
+  await page.getByPlaceholder("Search loaded posts, people, or topics…").fill("Marco");
+  await expect(heart).toHaveAttribute("aria-pressed", "true");
+  await heart.click();
+  await expect(heart).toHaveAttribute("aria-pressed", "false");
+  await expect(heart).toContainText("24");
+});
+
+test("successful reply updates the conversation and timeline without refreshing", async ({ page }) => {
+  await page.goto("/tests/fixtures/complete-workspace.html");
+  const timelinePost = page.locator(".unified-page:visible .unified-post").first();
+  await timelinePost.locator("time button").click();
+  const conversation = page.locator(".unified-page:visible");
+  await conversation.locator("#thread-reply").fill("A new reply from this account.");
+  await conversation.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(conversation.getByText("A new reply from this account.")).toBeVisible();
+  await expect(conversation.locator(".unified-post").first().locator("footer button").first()).toContainText("9");
+  await conversation.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(timelinePost.locator("footer button").first()).toContainText("9");
 });
