@@ -1,3 +1,9 @@
+//! Draft persistence and its separately stored media bytes.
+//!
+//! Saving a draft compares its expected revision before writing a new snapshot.
+//! Media files are replaced only after the database transaction succeeds, and
+//! loading a draft restores their bytes into the returned post.
+
 use super::{now_epoch_ms, Database};
 use crate::{
     error::AppError,
