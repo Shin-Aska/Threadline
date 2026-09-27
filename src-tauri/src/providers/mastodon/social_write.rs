@@ -1,3 +1,5 @@
+//! Applies Mastodon status and relationship actions through authenticated endpoints.
+
 use crate::{
     error::AppError,
     models::PublishedPost,
@@ -38,6 +40,7 @@ impl MastodonProvider {
         })
     }
 
+    /// Dispatches status actions, follow changes, and replies to Mastodon endpoints.
     pub(super) async fn apply_social_action(
         &self,
         action: SocialAction,
