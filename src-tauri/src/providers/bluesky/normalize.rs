@@ -1,3 +1,5 @@
+//! Maps Bluesky App View identities and posts to provider-neutral social models.
+
 use crate::{
     models::ProviderKind,
     providers::social::{Actor, Media, PostMetrics, SocialPost, ViewerState},
@@ -5,6 +7,7 @@ use crate::{
 
 use super::native;
 
+/// Uses the handle as display name when Bluesky omits one.
 pub(super) fn actor(value: native::Actor) -> Actor {
     Actor {
         id: value.did,
@@ -14,6 +17,7 @@ pub(super) fn actor(value: native::Actor) -> Actor {
     }
 }
 
+/// Preserves AT record references, reply ancestry, and viewer action URIs.
 pub(super) fn post(value: native::PostView) -> SocialPost {
     let handle = value.author.handle.clone();
     let rkey = value.uri.rsplit('/').next().unwrap_or_default();
