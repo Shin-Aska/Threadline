@@ -1,5 +1,11 @@
+//! Mastodon API response shapes used before provider-neutral normalization.
+//!
+//! Statuses, relationships, lists, notifications, and trends are deserialized
+//! only to the fields needed by the provider's read and discovery operations.
+
 use serde::Deserialize;
 
+/// Remote account identity, profile text, and optional activity counts.
 #[derive(Clone, Deserialize)]
 pub(super) struct Account {
     pub id: String,
@@ -14,6 +20,7 @@ pub(super) struct Account {
     pub statuses_count: Option<u64>,
 }
 
+/// Media URL, description, and Mastodon attachment type.
 #[derive(Clone, Deserialize)]
 pub(super) struct Attachment {
     pub url: String,
@@ -22,6 +29,7 @@ pub(super) struct Attachment {
     pub media_type: String,
 }
 
+/// Mastodon status with engagement and optional nested reblog data.
 #[derive(Clone, Deserialize)]
 pub(super) struct Status {
     pub id: String,
@@ -43,6 +51,7 @@ pub(super) struct Status {
     pub reblog: Option<Box<Status>>,
 }
 
+/// Ancestors and descendants of a requested status.
 #[derive(Deserialize)]
 pub(super) struct Context {
     #[serde(default)]
@@ -51,23 +60,27 @@ pub(super) struct Context {
     pub descendants: Vec<Status>,
 }
 
+/// Whether the connected account follows the requested account.
 #[derive(Deserialize, Default)]
 pub(super) struct Relationship {
     #[serde(default)]
     pub following: bool,
 }
 
+/// A followed hashtag.
 #[derive(Deserialize)]
 pub(super) struct Tag {
     pub name: String,
 }
 
+/// A Mastodon list identifier and title.
 #[derive(Deserialize)]
 pub(super) struct List {
     pub id: String,
     pub title: String,
 }
 
+/// Inbox activity with an optional related status.
 #[derive(Deserialize)]
 pub(super) struct Notification {
     pub id: String,
@@ -78,11 +91,13 @@ pub(super) struct Notification {
     pub status: Option<Status>,
 }
 
+/// One trend interval's usage count, encoded as a string by Mastodon.
 #[derive(Deserialize)]
 pub(super) struct TrendHistory {
     pub uses: String,
 }
 
+/// Trending hashtag and its reported usage history.
 #[derive(Deserialize)]
 pub(super) struct TrendTag {
     pub name: String,
@@ -90,6 +105,7 @@ pub(super) struct TrendTag {
     pub history: Vec<TrendHistory>,
 }
 
+/// Suggested account wrapper returned by the discovery endpoint.
 #[derive(Deserialize)]
 pub(super) struct Suggestion {
     pub account: Account,
