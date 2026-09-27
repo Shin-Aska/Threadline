@@ -1,3 +1,5 @@
+//! Loads followed people, tags, and lists, then maps their feeds and inbox activity.
+
 use crate::{
     error::AppError,
     models::ProviderKind,
@@ -10,6 +12,7 @@ use crate::{
 use super::{native, normalize, MastodonProvider};
 
 impl MastodonProvider {
+    /// Pages followed accounts; followed tags and lists appear on the first page only.
     pub(super) async fn followed_sources_page_impl(
         &self,
         cursor: Option<&str>,
@@ -87,6 +90,7 @@ impl MastodonProvider {
         Ok(SourcePage { sources, cursor })
     }
 
+    /// Routes person, tag, and list sources to their Mastodon timeline endpoints.
     pub(super) async fn source_feed_page(
         &self,
         source: &FollowedSource,
@@ -122,6 +126,7 @@ impl MastodonProvider {
         }
     }
 
+    /// Normalizes inbox activity and uses the last notification ID as cursor.
     pub(super) async fn notification_page(
         &self,
         cursor: Option<&str>,
