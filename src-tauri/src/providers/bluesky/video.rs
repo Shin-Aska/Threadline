@@ -1,3 +1,5 @@
+//! Uploads MP4 video through the Bluesky video service after checking live account limits.
+
 mod auth;
 use crate::{error::AppError, models::PreparedMedia};
 use auth::ServiceAuthSource;
@@ -11,6 +13,7 @@ const VIDEO_MIME: &str = "video/mp4";
 const PROCESSING_TIMEOUT: Duration = Duration::from_secs(300);
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+/// Current account allowance reported by the video service.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UploadLimits {
@@ -21,6 +24,7 @@ struct UploadLimits {
     error: Option<String>,
 }
 
+/// Processing state and optional completed blob for a video upload.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct JobStatus {
@@ -32,12 +36,14 @@ struct JobStatus {
     message: Option<String>,
 }
 
+/// Video service wrapper around the current processing job.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct JobResponse {
     job_status: JobStatus,
 }
 
+/// Uses the public video service in production and the supplied fixture URL in tests.
 pub(super) fn service_url(pds_url: &str) -> &str {
     #[cfg(test)]
     {
@@ -50,6 +56,7 @@ pub(super) fn service_url(pds_url: &str) -> &str {
     }
 }
 
+/// Uploads an MP4 using service tokens obtained from an app-password session.
 pub(super) async fn upload_video(
     client: &reqwest::Client,
     pds_url: &str,
@@ -71,6 +78,7 @@ pub(super) async fn upload_video(
     .await
 }
 
+/// Uploads an MP4 using service tokens obtained through the OAuth runtime.
 pub(super) async fn upload_video_oauth(
     oauth: &crate::oauth::bluesky::BlueskyOAuthRuntime,
     client: &reqwest::Client,
