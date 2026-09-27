@@ -1,13 +1,17 @@
+//! Obtains method-scoped video service tokens from app-password or OAuth credentials.
+
 use super::{response_json, VIDEO_SERVICE_DID};
 use crate::{error::AppError, oauth::bluesky::BlueskyOAuthRuntime};
 use serde::Deserialize;
 use std::time::Duration;
 
+/// Short-lived token returned by the PDS service authorization endpoint.
 #[derive(Deserialize)]
 struct ServiceAuth {
     token: String,
 }
 
+/// Credential route used to request video service authorization.
 pub(super) enum ServiceAuthSource<'a> {
     Bearer {
         pds_url: &'a str,
@@ -17,6 +21,7 @@ pub(super) enum ServiceAuthSource<'a> {
 }
 
 impl ServiceAuthSource<'_> {
+    /// Requests a video service token scoped to the given XRPC method.
     pub(super) async fn token(
         &self,
         client: &reqwest::Client,
