@@ -1,3 +1,6 @@
+//! Checks app-password session reuse, failure caching, expiry, and invalidation
+//! across concurrent reads and writes.
+
 use super::{bluesky::BlueskyProvider, SocialProvider};
 use std::{
     io::{BufRead, BufReader, Write},
