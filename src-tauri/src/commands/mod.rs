@@ -1,3 +1,6 @@
+//! Tauri commands for account connection, legacy post publishing, and preview.
+//!
+//! Connected providers live in [`AppState`], while account records and drafts are persisted.
 mod account_identity;
 pub mod browsing;
 pub mod publishing;
@@ -6,10 +9,12 @@ use crate::{composer, error::AppError, models::*, AppState};
 use std::sync::Arc;
 use tauri::State;
 #[tauri::command]
+/// Lists accounts stored in the workspace, including disconnected accounts.
 pub fn list_accounts(state: State<'_, AppState>) -> Result<Vec<Account>, AppError> {
     state.database.accounts()
 }
 #[tauri::command]
+/// Builds a destination-specific preview from the current account capabilities.
 pub fn preview_post(
     post: CanonicalPost,
     state: State<'_, AppState>,
@@ -17,6 +22,7 @@ pub fn preview_post(
     composer::preview(&post, &state.database.accounts()?)
 }
 #[tauri::command]
+/// Saves and publishes a post through the durable draft publication flow.
 pub async fn publish_post(
     post: CanonicalPost,
     state: State<'_, AppState>,
@@ -24,6 +30,7 @@ pub async fn publish_post(
     publish_to_accounts(post, &state).await
 }
 
+/// Persists a new draft, dispatches it, and maps ledger outcomes to the legacy result shape.
 pub async fn publish_to_accounts(
     post: CanonicalPost,
     state: &AppState,
@@ -58,6 +65,7 @@ pub async fn publish_to_accounts(
     })
 }
 
+/// Supplies provisional capabilities until a provider can report its own limits.
 pub(crate) fn default_capabilities(max_text_length: usize, mastodon: bool) -> PlatformCapabilities {
     PlatformCapabilities {
         max_text_length,
@@ -77,6 +85,7 @@ pub(crate) fn default_capabilities(max_text_length: usize, mastodon: bool) -> Pl
     }
 }
 
+/// Removes bundled sample accounts when no live provider is connected.
 pub(crate) fn remove_mock_accounts(state: &AppState) -> Result<(), AppError> {
     if state
         .providers
@@ -92,6 +101,7 @@ pub(crate) fn remove_mock_accounts(state: &AppState) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+/// Connects a Bluesky account using an app password and persists its credentials.
 pub async fn connect_bluesky(
     service_url: String,
     identifier: String,
@@ -100,6 +110,7 @@ pub async fn connect_bluesky(
 ) -> Result<Account, AppError> {
     connect_bluesky_account(service_url, identifier, app_password, &state).await
 }
+/// Validates credentials with Bluesky and registers the resulting account and provider.
 pub(crate) async fn connect_bluesky_account(
     service_url: String,
     identifier: String,
@@ -148,6 +159,7 @@ pub(crate) async fn connect_bluesky_account(
 }
 
 #[tauri::command]
+/// Connects a Mastodon account using an access token and persists its credentials.
 pub async fn connect_mastodon(
     base_url: String,
     access_token: String,
@@ -156,6 +168,7 @@ pub async fn connect_mastodon(
     connect_mastodon_account(base_url, access_token, &state).await
 }
 
+/// Discovers a Mastodon account and capabilities before registering its connection.
 pub(crate) async fn connect_mastodon_account(
     base_url: String,
     access_token: String,
@@ -204,6 +217,7 @@ pub(crate) async fn connect_mastodon_account(
 }
 
 #[tauri::command]
+/// Deletes an account record, attempts credential removal, and disconnects its provider.
 pub fn remove_account(account_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let _ = state.credentials.delete(&account_id);
     state.database.delete_account(&account_id)?;
@@ -216,6 +230,7 @@ pub fn remove_account(account_id: String, state: State<'_, AppState>) -> Result<
 }
 
 #[tauri::command]
+/// Returns the frontend's static storage integration status label.
 pub fn storage_health() -> String {
     "SQLite ready; credentials delegated to OS keychain".into()
 }
