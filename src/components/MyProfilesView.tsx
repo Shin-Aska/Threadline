@@ -7,7 +7,6 @@ import { presentSocialPosts, type SocialOrder } from "../services/social/present
 import type { WorkspaceState } from "../types";
 import type { ProfileDetails, ProfileFeedKind } from "../types/social";
 import { ProviderIcon } from "./ui";
-import { ExternalLinkWarningSetting } from "./unified/ExternalLinks";
 import { SocialFeedToolbar } from "./unified/SocialFeedToolbar";
 import { SocialPostCard } from "./unified/SocialPostCard";
 import { ViewHeader } from "./unified/ViewHeader";
@@ -61,7 +60,6 @@ export function MyProfilesView(props: ProfilesProps) {
           <section className="panel profile-rail-account">
             <h2>Your account</h2>
             <p className="aside-copy section-space">{account ? `You are viewing only posts from ${account.displayName}'s ${account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} profile.` : "You are viewing posts from all connected profiles."} Home Timeline reading scope stays separate.</p>
-            <ExternalLinkWarningSetting />
             <button className="button" onClick={props.onAccounts}>Manage accounts</button>
           </section>
         </div>
