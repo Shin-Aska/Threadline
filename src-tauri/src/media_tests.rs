@@ -1,3 +1,4 @@
+//! Attachment scenarios cover local rejection before upload and valid image/video preparation.
 use super::*;
 
 fn mp4() -> Vec<u8> {
