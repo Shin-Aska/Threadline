@@ -1,23 +1,29 @@
+//! Loads Mastodon hashtag suggestions from trends or search and summarizes usage history.
+
 use super::MastodonProvider;
 use crate::{
     error::AppError,
     hashtags::{response, valid_query, HashtagActivity, HashtagSuggestion},
 };
 use serde::Deserialize;
+/// Hashtag search or trend entry with optional daily history.
 #[derive(Deserialize)]
 struct Tag {
     name: String,
     history: Option<Vec<Day>>,
 }
+/// A daily usage count encoded as a string by Mastodon.
 #[derive(Deserialize)]
 struct Day {
     uses: String,
 }
+/// Hashtag portion of a Mastodon search response.
 #[derive(Deserialize)]
 struct Search {
     hashtags: Vec<Tag>,
 }
 impl MastodonProvider {
+    /// Uses trends for an empty query or hashtag search otherwise; invalid history remains unknown.
     pub(super) async fn search_hashtags(
         &self,
         query: &str,
