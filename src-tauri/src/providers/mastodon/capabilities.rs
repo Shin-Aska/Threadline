@@ -1,20 +1,25 @@
+//! Discovers instance publishing limits, with conservative defaults when discovery fails.
+
 use serde::Deserialize;
 
 use crate::models::{CountingPolicy, PlatformCapabilities};
 
 use super::MastodonProvider;
 
+/// Instance configuration returned by the Mastodon v2 instance endpoint.
 #[derive(Deserialize)]
 struct Instance {
     configuration: Configuration,
 }
 
+/// Publishing and media sections of the instance configuration.
 #[derive(Deserialize)]
 struct Configuration {
     statuses: Statuses,
     media_attachments: MediaAttachments,
 }
 
+/// Server limits for status text, links, and attachment count.
 #[derive(Deserialize)]
 struct Statuses {
     max_characters: usize,
@@ -22,6 +27,7 @@ struct Statuses {
     characters_reserved_per_url: usize,
 }
 
+/// Supported MIME types and optional video size limit.
 #[derive(Deserialize)]
 struct MediaAttachments {
     supported_mime_types: Vec<String>,
@@ -29,6 +35,7 @@ struct MediaAttachments {
 }
 
 impl MastodonProvider {
+    /// Reads instance limits and falls back to conservative defaults on request or parse failure.
     pub async fn discovered_capabilities(&self) -> PlatformCapabilities {
         let safe = PlatformCapabilities {
             max_text_length: 500,
