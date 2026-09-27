@@ -10,18 +10,29 @@ mod social_write;
 use crate::{error::AppError, models::*, providers::SocialProvider};
 use async_trait::async_trait;
 use serde::Deserialize;
+/// Mastodon transport for account data, feeds, actions, and publishing.
+///
+/// Requests use the account's instance `base_url` and bearer `access_token`.
+/// Its capabilities describe the limits and features discovered for that
+/// Mastodon server and account.
 pub struct MastodonProvider {
+    /// Publishing limits and features for this account.
     pub capabilities: PlatformCapabilities,
+    /// HTTP client shared across provider requests.
     pub client: reqwest::Client,
+    /// Base URL of the account's Mastodon instance.
     pub base_url: String,
+    /// Bearer token used to authenticate requests to the instance.
     pub access_token: String,
 }
 
+/// Minimal Mastodon status response used after publishing.
 #[derive(Deserialize)]
 struct StatusResponse {
     id: String,
 }
 
+/// Account fields needed to verify credentials and construct a handle.
 #[derive(Deserialize)]
 struct AccountResponse {
     id: String,
@@ -31,6 +42,10 @@ struct AccountResponse {
 }
 
 impl MastodonProvider {
+    /// Verifies the access token and returns account ID, handle, and display name.
+    ///
+    /// The handle includes the instance host when Mastodon returns only a
+    /// local username; a blank display name falls back to that username.
     pub async fn account(&self) -> Result<(String, String, String), AppError> {
         let response = self
             .client

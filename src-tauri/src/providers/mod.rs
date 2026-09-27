@@ -1,3 +1,9 @@
+//! Shared interface and adapters for the supported social networks.
+//!
+//! [`SocialProvider`] is the contract implemented by the Bluesky and Mastodon
+//! transports. The [`social`] module contains the provider-neutral feed,
+//! profile, notification, and action types returned through that contract.
+
 pub mod bluesky;
 pub mod mastodon;
 pub mod social;
@@ -6,13 +12,24 @@ use crate::{
     models::{PlatformCapabilities, PreparedPost, PublishedPost},
 };
 use async_trait::async_trait;
+/// Operations the application can request from a connected social account.
+///
+/// Implementations are shared behind `Arc<dyn SocialProvider>`, so they must be
+/// safe to send and access across async tasks. `capabilities`, `publish`, and
+/// `reply` are required; reading and social methods default to
+/// [`AppError::Provider`] when unsupported.
+///
+/// Pagination cursors are opaque provider values. Pass a returned cursor back
+/// to the same operation to request its next page, or `None` for the first page.
 #[async_trait]
 pub trait SocialProvider: Send + Sync {
+    /// Returns the connected account's home feed.
     async fn home_feed(&self, _cursor: Option<&str>) -> Result<social::FeedPage, AppError> {
         Err(AppError::Provider(
             "Home feed is unavailable for this provider".into(),
         ))
     }
+    /// Returns posts, replies, or media from the connected account's profile.
     async fn own_feed(
         &self,
         _kind: social::ProfileFeedKind,
@@ -22,16 +39,19 @@ pub trait SocialProvider: Send + Sync {
             "Own profile feed is unavailable for this provider".into(),
         ))
     }
+    /// Returns the connected account's profile and relationship counts.
     async fn own_profile(&self) -> Result<social::ProfileDetails, AppError> {
         Err(AppError::Provider(
             "Own profile is unavailable for this provider".into(),
         ))
     }
+    /// Returns a profile identified by the provider's remote profile ID.
     async fn profile(&self, _profile_id: &str) -> Result<social::ProfileDetails, AppError> {
         Err(AppError::Provider(
             "Profile details are unavailable for this provider".into(),
         ))
     }
+    /// Returns one category of posts from another profile.
     async fn profile_feed(
         &self,
         _profile_id: &str,
@@ -42,11 +62,13 @@ pub trait SocialProvider: Send + Sync {
             "Profile feed is unavailable for this provider".into(),
         ))
     }
+    /// Returns a post together with its ancestors and replies.
     async fn thread(&self, _post_id: &str) -> Result<social::ThreadView, AppError> {
         Err(AppError::Provider(
             "Thread is unavailable for this provider".into(),
         ))
     }
+    /// Returns posts associated with a hashtag, using the provider's tag syntax.
     async fn tag_feed(
         &self,
         _tag: &str,
@@ -56,6 +78,7 @@ pub trait SocialProvider: Send + Sync {
             "Tag feed is unavailable for this provider".into(),
         ))
     }
+    /// Returns a page of people, tags, lists, or feeds the account follows.
     async fn followed_sources_page(
         &self,
         _cursor: Option<&str>,
@@ -64,6 +87,7 @@ pub trait SocialProvider: Send + Sync {
             "Followed sources are unavailable for this provider".into(),
         ))
     }
+    /// Returns posts from one followed source selected from a source page.
     async fn source_feed(
         &self,
         _source: &social::FollowedSource,
@@ -73,6 +97,7 @@ pub trait SocialProvider: Send + Sync {
             "Source feed is unavailable for this provider".into(),
         ))
     }
+    /// Returns a page of notifications for the connected account.
     async fn notifications(
         &self,
         _cursor: Option<&str>,
@@ -81,11 +106,13 @@ pub trait SocialProvider: Send + Sync {
             "Notifications are unavailable for this provider".into(),
         ))
     }
+    /// Marks the specified provider notification IDs as read.
     async fn mark_notifications_read(&self, _ids: &[String]) -> Result<(), AppError> {
         Err(AppError::Provider(
             "Notification read state is unavailable for this provider".into(),
         ))
     }
+    /// Performs a typed action such as liking, reposting, following, or replying.
     async fn social_action(
         &self,
         _action: social::SocialAction,
@@ -94,6 +121,10 @@ pub trait SocialProvider: Send + Sync {
             "This social action is unavailable for this provider".into(),
         ))
     }
+    /// Returns the home timeline in the legacy JSON shape used by unified views.
+    ///
+    /// `account_id` and `account_handle` identify the source account attached to
+    /// each normalized post; `cursor` requests a subsequent page.
     async fn timeline(
         &self,
         _account_id: &str,
@@ -104,6 +135,7 @@ pub trait SocialProvider: Send + Sync {
             "Home timeline is unavailable for this provider".into(),
         ))
     }
+    /// Returns legacy JSON discovery data for the specified source account.
     async fn discovery(
         &self,
         _account_id: &str,
@@ -113,11 +145,13 @@ pub trait SocialProvider: Send + Sync {
             "Discovery is unavailable for this provider".into(),
         ))
     }
+    /// Returns followed sources in the legacy JSON shape.
     async fn following_sources(&self, _account_id: &str) -> Result<serde_json::Value, AppError> {
         Err(AppError::Provider(
             "Followed sources are unavailable for this provider".into(),
         ))
     }
+    /// Searches provider hashtags matching `query`.
     async fn hashtags(
         &self,
         _query: &str,
@@ -126,8 +160,11 @@ pub trait SocialProvider: Send + Sync {
             "Hashtag lookup is unavailable for this provider".into(),
         ))
     }
+    /// Reports the platform's publishing limits and supported features.
     async fn capabilities(&self) -> Result<PlatformCapabilities, AppError>;
+    /// Publishes a prepared post and returns its remote identifiers.
     async fn publish(&self, post: PreparedPost) -> Result<PublishedPost, AppError>;
+    /// Publishes a prepared reply to an existing post on this provider.
     async fn reply(
         &self,
         parent: &PublishedPost,
@@ -135,6 +172,10 @@ pub trait SocialProvider: Send + Sync {
     ) -> Result<PublishedPost, AppError>;
 }
 
+/// Produces a bounded excerpt of an HTTP error response.
+///
+/// Replaces control characters with spaces, keeps at most 500 Unicode scalar
+/// values, and returns `"empty response"` if the result has no characters.
 pub fn safe_error_body(body: &str) -> String {
     const LIMIT: usize = 500;
     let sanitized: String = body
@@ -155,6 +196,10 @@ pub fn safe_error_body(body: &str) -> String {
     }
 }
 
+/// Converts followed sources to the legacy JSON records consumed by the UI.
+///
+/// The returned array retains each source's identity and labels, adds the
+/// owning `accountId`, and maps source kinds to `PERSON`, `TOPIC`, or `FEED`.
 pub(crate) fn legacy_sources(
     account_id: &str,
     sources: Vec<social::FollowedSource>,
@@ -182,6 +227,11 @@ pub(crate) fn legacy_sources(
     )
 }
 
+/// Converts a normalized post to the legacy unified-post JSON shape.
+///
+/// `account_id` and `account_handle` become the post's source attribution.
+/// Media fields are renamed for that shape, while the post's metrics and
+/// viewer state are carried through.
 pub(crate) fn legacy_post(
     post: social::SocialPost,
     account_id: &str,
@@ -224,6 +274,10 @@ pub(crate) fn legacy_post(
     })
 }
 
+/// Returns the current UTC time as an RFC 3339 timestamp with whole seconds.
+///
+/// The output uses the form `YYYY-MM-DDTHH:MM:SSZ`. If the system clock is
+/// earlier than the Unix epoch, it falls back to the epoch.
 pub fn now_iso8601() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let seconds = SystemTime::now()
@@ -242,6 +296,7 @@ pub fn now_iso8601() -> String {
     )
 }
 
+/// Converts whole days since the Unix epoch into a Gregorian year, month, day.
 fn civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
     let z = days_since_epoch + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;

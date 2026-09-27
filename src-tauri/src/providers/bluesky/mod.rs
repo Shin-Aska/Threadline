@@ -18,16 +18,30 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+/// Bluesky transport for reading feeds and publishing through AT Protocol.
+///
+/// App-password accounts reuse a short-lived session held in
+/// `app_password_session`. OAuth accounts instead use `oauth` for authenticated
+/// requests and refresh. The other fields hold the service and account settings,
+/// HTTP client, and publishing capabilities.
 pub struct BlueskyProvider {
+    /// Cached app-password sign-in, or a brief failed-sign-in cooldown.
     pub(crate) app_password_session: tokio::sync::Mutex<AppPasswordSessionState>,
+    /// Publishing limits and features for this account.
     pub capabilities: PlatformCapabilities,
+    /// HTTP client shared across provider requests.
     pub client: reqwest::Client,
+    /// Base URL of the account's AT Protocol service.
     pub service_url: String,
+    /// Identifier supplied for app-password sign-in.
     pub identifier: String,
+    /// App password used only for app-password authentication.
     pub app_password: String,
+    /// OAuth runtime when this account authenticates with OAuth.
     pub oauth: Option<Arc<crate::oauth::bluesky::BlueskyOAuthRuntime>>,
 }
 
+/// Identity and bearer token returned by app-password session creation.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SessionResponse {
@@ -36,18 +50,24 @@ pub(crate) struct SessionResponse {
     pub(crate) handle: String,
 }
 
+/// Cached state of an app-password session.
+///
+/// An active session can be reused for 20 minutes; a failed sign-in prevents
+/// another attempt for five seconds.
 #[derive(Default)]
 pub(crate) enum AppPasswordSessionState {
     #[default]
+    /// No reusable session or recent failure exists.
     Empty,
+    /// A successful session and the instant it was created.
     Active {
         created: Instant,
         session: SessionResponse,
     },
-    Failed {
-        created: Instant,
-    },
+    /// A recent sign-in failure and the instant it occurred.
+    Failed { created: Instant },
 }
+/// Remote identifiers returned after a Bluesky record is created.
 #[derive(Deserialize)]
 struct RecordResponse {
     uri: String,
@@ -119,6 +139,10 @@ impl BlueskyProvider {
         }
     }
 
+    /// Resolves the authenticated account's DID and handle.
+    ///
+    /// Uses the OAuth subject and profile for OAuth accounts, or the cached
+    /// app-password session for app-password accounts.
     pub async fn account(&self) -> Result<(String, String), AppError> {
         if let Some(oauth) = &self.oauth {
             #[derive(Deserialize)]
