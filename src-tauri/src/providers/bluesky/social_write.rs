@@ -1,3 +1,5 @@
+//! Applies Bluesky social actions by creating or deleting AT Protocol records.
+
 use crate::{
     error::AppError,
     models::{ProviderKind, PublishedPost},
@@ -62,6 +64,7 @@ impl BlueskyProvider {
         Ok(())
     }
 
+    /// Fetches the current post view to obtain its URI, CID, and viewer records.
     pub(super) async fn resolve_post(&self, post_id: &str) -> Result<native::PostView, AppError> {
         let response: native::PostsResponse = self
             .social_get("app.bsky.feed.getPosts", &[("uris", post_id)])
@@ -73,6 +76,7 @@ impl BlueskyProvider {
             .ok_or_else(|| AppError::Provider("Bluesky post is unavailable".into()))
     }
 
+    /// Dispatches likes, reposts, follows, and replies to AT record operations.
     pub(super) async fn apply_social_action(
         &self,
         action: SocialAction,
