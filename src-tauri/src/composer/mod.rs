@@ -1,10 +1,21 @@
+//! Preview and split a canonical post for each destination's text limit.
+//!
+//! Splitting counts Unicode graphemes and prefers paragraph, sentence, then
+//! whitespace boundaries before falling back to the exact limit.
+
 use crate::{error::AppError, models::*};
 use unicode_segmentation::UnicodeSegmentation;
+/// Where a numbered thread marker appears relative to its text.
 #[derive(Debug, Clone)]
 pub enum NumberPosition {
+    /// Place the marker before the text, such as `1/2 Hello`.
     Prefix,
+    /// Place the marker after the text, such as `Hello 1/2`.
     Suffix,
 }
+/// Formatting of markers added to parts of a split post.
+///
+/// The default is a prefix separated from the text by one space.
 #[derive(Debug, Clone)]
 pub struct NumberingFormat {
     pub position: NumberPosition,
@@ -75,6 +86,10 @@ fn raw_parts(text: &str, max: usize) -> Result<Vec<String>, AppError> {
     }
     Ok(out)
 }
+/// Splits post text into numbered parts that fit the destination limit.
+///
+/// A post that fits remains unchanged unless `force_number` is true. Empty
+/// text or a limit too small for numbering returns a validation error.
 pub fn split_thread(
     text: &str,
     limit: usize,
@@ -108,6 +123,10 @@ pub fn split_thread(
     }
     Err(AppError::Validation("thread could not converge".into()))
 }
+/// Calculates the text parts and limits for every selected account.
+///
+/// Validates destination IDs and media before applying the post's publishing
+/// policy; an attachment-only post has an empty text part for each account.
 pub fn preview(post: &CanonicalPost, accounts: &[Account]) -> Result<PublishingPreview, AppError> {
     if post.destination_account_ids.is_empty() {
         return Err(AppError::Validation(
