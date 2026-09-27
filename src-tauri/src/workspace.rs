@@ -1,3 +1,4 @@
+//! Restores connected providers and exposes the persisted workspace snapshot.
 use crate::{
     config::{provider_from_credential_with_persistence, ProviderMap},
     credentials::CredentialStore,
@@ -8,10 +9,14 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// Identifies the bundled sample account IDs removed during initialization.
 pub fn is_mock_account(id: &str) -> bool {
     matches!(id, "bsky-alice" | "mastodon-social" | "mastodon-long")
 }
 
+/// Restores stored credentials, removes sample accounts, and registers environment accounts.
+///
+/// Accounts without usable credentials remain persisted but disconnected.
 pub async fn initialize(
     database: &Database,
     credentials: Arc<dyn CredentialStore>,
@@ -46,6 +51,7 @@ pub async fn initialize(
     Ok(providers)
 }
 
+/// Returns stored accounts and the IDs of currently connected providers.
 pub fn snapshot(state: &AppState) -> Result<WorkspaceState, AppError> {
     let accounts = state.database.accounts()?;
     let providers = state
@@ -67,9 +73,11 @@ pub fn snapshot(state: &AppState) -> Result<WorkspaceState, AppError> {
 }
 
 #[tauri::command]
+/// Exposes the current workspace snapshot to the frontend.
 pub fn get_workspace(state: tauri::State<'_, AppState>) -> Result<WorkspaceState, AppError> {
     snapshot(&state)
 }
 
 #[cfg(test)]
+/// Covers restoration, disconnected records, sample cleanup, and snapshot shape.
 mod tests;
