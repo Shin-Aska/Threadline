@@ -1,3 +1,5 @@
+//! HTTP client construction that pins public DNS answers for OAuth requests.
+
 use super::OAuthError;
 use std::{
     net::{IpAddr, SocketAddr},
@@ -5,6 +7,9 @@ use std::{
 };
 use url::Url;
 
+/// Resolves an OAuth host, rejects non-public answers, and pins the accepted addresses.
+///
+/// The returned client has a 20-second request timeout and does not follow redirects.
 pub async fn pinned_client(url: &Url) -> Result<reqwest::Client, OAuthError> {
     let host = url
         .host_str()
@@ -74,6 +79,7 @@ fn private_address(address: IpAddr) -> bool {
 }
 
 #[cfg(test)]
+/// Checks that special-use IPv4 and IPv6 destinations fail the public-address filter.
 mod tests {
     use super::private_address;
     use std::net::IpAddr;
