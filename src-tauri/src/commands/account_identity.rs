@@ -1,5 +1,7 @@
+//! Stable Mastodon account IDs across instances and legacy reconnects.
 use crate::{error::AppError, models::Account};
 
+/// Includes the canonical server in a new ID while retaining a matching legacy ID.
 pub(super) fn mastodon_account_id(
     base_url: &str,
     remote_id: &str,
@@ -24,6 +26,7 @@ pub(super) fn mastodon_account_id(
 }
 
 #[cfg(test)]
+/// Covers distinct instances and canonicalized legacy reconnects.
 mod tests {
     use super::*;
     use crate::models::ProviderKind;
