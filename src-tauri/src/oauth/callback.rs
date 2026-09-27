@@ -1,3 +1,5 @@
+//! One-shot loopback callback listener and callback parameter validation.
+
 use super::OAuthError;
 use serde::Deserialize;
 use std::time::Duration;
@@ -11,13 +13,18 @@ use url::Url;
 const MAX_REQUEST_BYTES: usize = 8_192;
 
 #[derive(Debug, PartialEq, Eq)]
+/// Authorization response extracted from a validated callback target.
 pub struct CallbackPayload {
+    /// Authorization code to exchange with the provider.
     pub code: String,
+    /// State returned by the provider for this login.
     pub state: String,
+    /// Optional issuer supplied by the authorization server.
     pub issuer: Option<String>,
 }
 
 #[derive(Deserialize)]
+/// Query fields accepted at the local callback boundary.
 struct CallbackQuery {
     code: Option<String>,
     state: Option<String>,
@@ -25,12 +32,14 @@ struct CallbackQuery {
     error: Option<String>,
 }
 
+/// IPv4 loopback listener for one browser authorization response.
 pub struct LoopbackCallback {
     listener: TcpListener,
     path: &'static str,
 }
 
 impl LoopbackCallback {
+    /// Binds an ephemeral `127.0.0.1` port for the requested callback path.
     pub async fn bind(path: &'static str) -> Result<Self, OAuthError> {
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
@@ -38,6 +47,7 @@ impl LoopbackCallback {
         Ok(Self { listener, path })
     }
 
+    /// Returns the redirect URI containing this listener's assigned port and path.
     pub fn redirect_uri(&self) -> Result<String, OAuthError> {
         let address = self
             .listener
@@ -46,6 +56,10 @@ impl LoopbackCallback {
         Ok(format!("http://127.0.0.1:{}{}", address.port(), self.path))
     }
 
+    /// Accepts one callback, subject to cancellation and the given timeout.
+    ///
+    /// The callback path is always checked. State is checked when `expected_state` is present;
+    /// Bluesky also validates state during its token exchange.
     pub async fn wait(
         self,
         expected_state: Option<&str>,
@@ -63,6 +77,9 @@ impl LoopbackCallback {
     }
 }
 
+/// Parses a callback target after checking its path and expected state.
+///
+/// Provider errors, missing code or state, and malformed query data are rejected.
 pub fn parse_callback_target(
     target: &str,
     expected_path: &str,
