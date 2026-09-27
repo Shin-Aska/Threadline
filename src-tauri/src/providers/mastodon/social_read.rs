@@ -1,3 +1,5 @@
+//! Reads Mastodon timelines, profiles, and threads using status ID cursors.
+
 use crate::{
     error::AppError,
     providers::social::{FeedPage, ProfileDetails, ProfileFeedKind, ThreadView},
@@ -6,6 +8,7 @@ use crate::{
 use super::{native, normalize, MastodonProvider};
 
 impl MastodonProvider {
+    /// Loads the home timeline using a maximum status ID as the cursor.
     pub(super) async fn home_feed_page(&self, cursor: Option<&str>) -> Result<FeedPage, AppError> {
         let mut request = self
             .client
@@ -18,6 +21,7 @@ impl MastodonProvider {
         self.status_page(statuses)
     }
 
+    /// Sends an authenticated read request and reports bounded provider errors.
     pub(super) async fn social_get<T: serde::de::DeserializeOwned>(
         &self,
         request: reqwest::RequestBuilder,
@@ -45,6 +49,7 @@ impl MastodonProvider {
             .map_err(|error| AppError::Provider(format!("Invalid Mastodon {label}: {error}")))
     }
 
+    /// Combines profile data with the connected account's follow relationship.
     pub(super) async fn profile_details(
         &self,
         profile_id: &str,
@@ -83,6 +88,7 @@ impl MastodonProvider {
         })
     }
 
+    /// Loads posts, replies, or media from one account using status ID pagination.
     pub(super) async fn profile_feed_page(
         &self,
         profile_id: &str,
@@ -115,6 +121,7 @@ impl MastodonProvider {
         self.status_page(statuses)
     }
 
+    /// Resolves the connected account before loading its status feed.
     pub(super) async fn own_feed_page(
         &self,
         kind: ProfileFeedKind,
@@ -132,6 +139,7 @@ impl MastodonProvider {
         self.profile_feed_page(&account.id, kind, cursor).await
     }
 
+    /// Resolves and loads the connected account's full profile.
     pub(super) async fn own_profile_details(&self) -> Result<ProfileDetails, AppError> {
         let account: native::Account = self
             .social_get(
@@ -145,6 +153,7 @@ impl MastodonProvider {
         self.profile_details(&account.id).await
     }
 
+    /// Normalizes statuses and uses the last returned ID for pagination.
     pub(super) fn status_page(&self, statuses: Vec<native::Status>) -> Result<FeedPage, AppError> {
         let cursor = statuses.last().map(|status| status.id.clone());
         let posts = statuses
@@ -154,6 +163,7 @@ impl MastodonProvider {
         Ok(FeedPage { posts, cursor })
     }
 
+    /// Combines a focal status with its context ancestors and descendants.
     pub(super) async fn thread_view(&self, post_id: &str) -> Result<ThreadView, AppError> {
         let post: native::Status = self
             .social_get(
@@ -187,6 +197,7 @@ impl MastodonProvider {
         })
     }
 
+    /// Loads a hashtag timeline after validating the tag for a URL path.
     pub(super) async fn tag_feed_page(
         &self,
         tag: &str,
