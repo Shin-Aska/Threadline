@@ -1,4 +1,4 @@
-import { Maximize2, Minus, Plus, X } from "lucide-react";
+import { Maximize2, Minus, Mouse, MousePointer2, Move, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -186,7 +186,12 @@ export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
           <button type="button" className="image-viewer__button" aria-label="Zoom in" disabled={zoom >= MAX_ZOOM} onClick={() => zoomTo(zoomRef.current + ZOOM_STEP)}><Plus size={20} aria-hidden="true" /></button>
           <output className="image-viewer__zoom">{zoom}%</output>
           <button type="button" className="image-viewer__button image-viewer__fit" aria-label="Fit image to view" onClick={() => { zoomTo(100); moveTo({ x: 0, y: 0 }); }}><Maximize2 size={18} aria-hidden="true" /><span>Fit</span></button>
-          <span className="image-viewer__hint">Scroll or +/- to zoom · drag or arrows to move</span>
+          <div className="image-viewer__hint" aria-label="Scroll or use plus and minus keys to zoom. Drag or use arrow keys to move the image.">
+            <span className="image-viewer__shortcut"><Mouse size={16} aria-hidden="true" />Scroll to zoom</span>
+            <span className="image-viewer__shortcut"><kbd><Plus size={13} aria-hidden="true" /><span className="sr-only">Plus</span></kbd><kbd><Minus size={13} aria-hidden="true" /><span className="sr-only">Minus</span></kbd>Zoom keys</span>
+            <span className="image-viewer__shortcut"><MousePointer2 size={16} aria-hidden="true" />Drag to move</span>
+            <span className="image-viewer__shortcut"><Move size={16} aria-hidden="true" />Arrow keys to move</span>
+          </div>
         </div>
       </div>
     </div>,
