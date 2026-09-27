@@ -1,8 +1,11 @@
+//! Combines Mastodon trends, account suggestions, and popular statuses for discovery.
+
 use crate::error::AppError;
 
 use super::{native, normalize, MastodonProvider};
 
 impl MastodonProvider {
+    /// Returns trending tags, suggested accounts, and normalized popular statuses.
     pub(super) async fn discovery_result(
         &self,
         account_id: &str,
