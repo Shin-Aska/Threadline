@@ -16,6 +16,7 @@ use crate::{
 use tauri::State;
 
 #[tauri::command]
+/// Saves a draft, subject to its expected revision when supplied.
 pub fn save_draft(
     input: SaveDraftInput,
     state: State<'_, AppState>,
@@ -24,21 +25,25 @@ pub fn save_draft(
 }
 
 #[tauri::command]
+/// Lists persisted drafts for the workspace.
 pub fn list_drafts(state: State<'_, AppState>) -> Result<Vec<DraftRecord>, AppError> {
     state.database.list_drafts()
 }
 
 #[tauri::command]
+/// Loads a persisted draft by ID.
 pub fn get_draft(id: String, state: State<'_, AppState>) -> Result<DraftRecord, AppError> {
     state.database.get_draft(&id)
 }
 
 #[tauri::command]
+/// Deletes a draft by ID through the database layer.
 pub fn delete_draft(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     state.database.delete_draft(&id)
 }
 
 #[tauri::command]
+/// Begins or resumes publication of a persisted draft.
 pub async fn publish_draft(
     id: String,
     state: State<'_, AppState>,
@@ -47,16 +52,21 @@ pub async fn publish_draft(
 }
 
 #[tauri::command]
+/// Lists publication ledger records.
 pub fn list_publications(state: State<'_, AppState>) -> Result<Vec<PublicationRecord>, AppError> {
     state.database.list_publications()
 }
 
 #[tauri::command]
+/// Deletes a publication record by ID through the database layer.
 pub fn delete_publication(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     state.database.delete_publication(&id)
 }
 
 #[tauri::command]
+/// Schedules a draft snapshot for a future time.
+///
+/// Rejects times that have already passed before asking the database to create the schedule.
 pub fn create_schedule(
     input: CreateScheduleInput,
     state: State<'_, AppState>,
@@ -70,11 +80,13 @@ pub fn create_schedule(
 }
 
 #[tauri::command]
+/// Lists persisted scheduled publications.
 pub fn list_schedules(state: State<'_, AppState>) -> Result<Vec<ScheduledPublication>, AppError> {
     state.database.list_schedules()
 }
 
 #[tauri::command]
+/// Moves a schedule to a future time, subject to its expected revision.
 pub fn reschedule_publication(
     input: RescheduleInput,
     state: State<'_, AppState>,
@@ -88,6 +100,7 @@ pub fn reschedule_publication(
 }
 
 #[tauri::command]
+/// Cancels a schedule, subject to its expected revision.
 pub fn cancel_schedule(
     input: ScheduleMutationInput,
     state: State<'_, AppState>,
@@ -98,6 +111,7 @@ pub fn cancel_schedule(
 }
 
 #[tauri::command]
+/// Claims a schedule for immediate dispatch and publishes the claimed snapshot.
 pub async fn send_schedule_now(
     input: ScheduleMutationInput,
     state: State<'_, AppState>,
