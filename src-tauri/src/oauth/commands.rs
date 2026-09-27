@@ -1,3 +1,5 @@
+//! Tauri entry points that connect completed OAuth logins to stored accounts.
+
 use super::{
     bluesky::{self, BlueskyLoginRequest},
     mastodon::{self, MastodonLoginRequest},
@@ -13,6 +15,7 @@ use crate::{
 use std::sync::Arc;
 use tauri::State;
 
+/// Connects a Mastodon account through a cancellable browser login.
 #[tauri::command]
 pub async fn connect_mastodon_oauth(
     flow_id: String,
@@ -27,6 +30,10 @@ pub async fn connect_mastodon_oauth(
     connect_mastodon_account(base_url, access_token, &state).await
 }
 
+/// Connects a Bluesky account using a loopback or hosted native callback.
+///
+/// A metadata URL selects hosted login, whose deep link is routed through the
+/// active flow. The restored runtime persists refreshed credentials.
 #[tauri::command]
 pub async fn connect_bluesky_oauth(
     flow_id: String,
@@ -81,11 +88,13 @@ pub async fn connect_bluesky_oauth(
     Ok(account)
 }
 
+/// Cancels the active login identified by `flow_id`.
 #[tauri::command]
 pub fn cancel_oauth_login(flow_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     state.oauth.cancel(&flow_id).map_err(app_error)
 }
 
+/// Routes an incoming native callback URL to the sole awaiting hosted login.
 pub fn deliver_deep_link(state: &AppState, url: String) -> Result<(), AppError> {
     state.oauth.deliver_deep_link(url).map_err(app_error)
 }
