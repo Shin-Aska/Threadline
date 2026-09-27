@@ -1,3 +1,5 @@
+//! Maps Mastodon accounts and statuses to provider-neutral social models.
+
 use crate::{
     error::AppError,
     models::ProviderKind,
@@ -6,6 +8,7 @@ use crate::{
 
 use super::native;
 
+/// Uses the account handle when Mastodon leaves the display name blank.
 pub(super) fn actor(value: native::Account) -> Actor {
     let display_name = if value.display_name.trim().is_empty() {
         value.acct.clone()
@@ -20,6 +23,7 @@ pub(super) fn actor(value: native::Account) -> Actor {
     }
 }
 
+/// Normalizes a status or its nested reblog, including attachments and viewer state.
 pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, AppError> {
     let value = value.reblog.as_deref().cloned().unwrap_or(value);
     let cleaner =
