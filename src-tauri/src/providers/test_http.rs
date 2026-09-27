@@ -1,12 +1,18 @@
+//! Provides a local HTTP fixture that records provider requests in response order.
+
 use std::{
     io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
     time::{Duration, Instant},
 };
+/// Request headers and body captured by the local fixture server.
 pub(super) struct Request {
+    /// Raw request headers, including the request line.
     pub headers: String,
+    /// Exact request body bytes read using Content-Length.
     pub body: Vec<u8>,
 }
+/// Serves the supplied responses in order and returns every captured request.
 pub(super) fn server(
     responses: Vec<(u16, &'static str)>,
 ) -> (String, std::thread::JoinHandle<Vec<Request>>) {
