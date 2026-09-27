@@ -1,5 +1,7 @@
+//! Errors shared by commands and service modules and serialized for Tauri responses.
 use serde::Serialize;
 #[derive(Debug, thiserror::Error)]
+/// Application errors reported to the frontend as display strings.
 pub enum AppError {
     #[error("database error: {0}")]
     Database(#[from] rusqlite::Error),
