@@ -1,3 +1,5 @@
+//! Reads Bluesky timelines, profiles, threads, and tag search as normalized pages.
+
 use crate::{
     error::AppError,
     providers::social::{FeedPage, ProfileDetails, ProfileFeedKind, ThreadView},
@@ -6,6 +8,7 @@ use crate::{
 use super::{native, normalize, BlueskyProvider};
 
 impl BlueskyProvider {
+    /// Loads the home timeline with an opaque Bluesky cursor.
     pub(super) async fn home_feed_page(&self, cursor: Option<&str>) -> Result<FeedPage, AppError> {
         let mut query = vec![("limit", "50")];
         if let Some(cursor) = cursor {
@@ -23,6 +26,7 @@ impl BlueskyProvider {
         })
     }
 
+    /// Deserializes an authenticated App View read response.
     pub(super) async fn social_get<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -31,6 +35,7 @@ impl BlueskyProvider {
         self.get_json(path, query).await
     }
 
+    /// Loads a profile and its current follow record URI.
     pub(super) async fn profile_details(
         &self,
         profile_id: &str,
@@ -57,6 +62,7 @@ impl BlueskyProvider {
         })
     }
 
+    /// Loads an author's posts, replies, or media with the matching App View filter.
     pub(super) async fn profile_feed_page(
         &self,
         profile_id: &str,
@@ -89,6 +95,7 @@ impl BlueskyProvider {
         })
     }
 
+    /// Loads the connected account's author feed.
     pub(super) async fn own_feed_page(
         &self,
         kind: ProfileFeedKind,
@@ -98,11 +105,13 @@ impl BlueskyProvider {
         self.profile_feed_page(&did, kind, cursor).await
     }
 
+    /// Loads the connected account's profile through its DID.
     pub(super) async fn own_profile_details(&self) -> Result<ProfileDetails, AppError> {
         let did = self.account_did().await?;
         self.profile_details(&did).await
     }
 
+    /// Returns the focal post, ordered ancestors, and loaded direct replies.
     pub(super) async fn thread_view(&self, post_id: &str) -> Result<ThreadView, AppError> {
         let response: native::ThreadResponse = self
             .social_get(
@@ -138,6 +147,7 @@ impl BlueskyProvider {
         })
     }
 
+    /// Searches for posts containing the requested hashtag.
     pub(super) async fn tag_feed_page(
         &self,
         tag: &str,
