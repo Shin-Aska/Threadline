@@ -1,3 +1,8 @@
+//! SQLite workspace storage and the root of draft and publication persistence.
+//!
+//! A mutex serializes access to the connection. Media files live beside the
+//! database for persistent workspaces and in a temporary directory for tests.
+
 use crate::{error::AppError, models::*};
 use rusqlite::{params, Connection};
 use std::{
@@ -6,12 +11,20 @@ use std::{
 };
 pub(crate) mod notifications;
 pub(crate) mod publishing;
+/// Workspace database, its serialized SQLite connection, and draft media root.
+///
+/// Persistent instances leave media on disk when dropped. In-memory instances
+/// own a temporary media directory and remove it on drop.
 pub struct Database {
     connection: Mutex<Connection>,
     media_root: PathBuf,
     remove_media_on_drop: bool,
 }
 impl Database {
+    /// Opens or creates a database and its sibling media directory.
+    ///
+    /// Initializes the schema, publication ledger, notification reads, and
+    /// cleanup of media files no longer referenced by drafts.
     pub fn open(path: &Path) -> Result<Self, AppError> {
         let c = Connection::open(path)?;
         let media_root = path.with_extension("media");
@@ -25,6 +38,7 @@ impl Database {
         db.initialize()?;
         Ok(db)
     }
+    /// Creates an in-memory database with a temporary media directory.
     pub fn in_memory() -> Result<Self, AppError> {
         let c = Connection::open_in_memory()?;
         let media_root =
@@ -39,6 +53,7 @@ impl Database {
         db.initialize()?;
         Ok(db)
     }
+    /// Returns a locked connection, or a state error if its mutex is poisoned.
     pub(crate) fn connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AppError> {
         self.connection
             .lock()
@@ -51,6 +66,7 @@ impl Database {
         self.cleanup_orphaned_media()?;
         Ok(())
     }
+    /// Inserts accounts that are not already present, preserving existing rows.
     pub fn seed(&self, accounts: &[Account]) -> Result<(), AppError> {
         let c = self.connection()?;
         for a in accounts {
@@ -58,6 +74,7 @@ impl Database {
         }
         Ok(())
     }
+    /// Inserts an account or refreshes its public profile and capabilities.
     pub fn upsert_account(&self, account: &Account) -> Result<(), AppError> {
         self.connection()?.execute(
             "INSERT INTO accounts(id,provider,handle,display_name,instance_url,did,capabilities_json) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,handle=excluded.handle,display_name=excluded.display_name,instance_url=excluded.instance_url,did=excluded.did,capabilities_json=excluded.capabilities_json",
@@ -65,58 +82,23 @@ impl Database {
         )?;
         Ok(())
     }
+    /// Removes an account row by its Threadline ID.
     pub fn delete_account(&self, account_id: &str) -> Result<(), AppError> {
         self.connection()?
             .execute("DELETE FROM accounts WHERE id=?1", [account_id])?;
         Ok(())
     }
+    /// Replaces all stored account rows with the provided set.
     pub fn replace_accounts(&self, accounts: &[Account]) -> Result<(), AppError> {
         {
             self.connection()?.execute("DELETE FROM accounts", [])?;
         }
         self.seed(accounts)
     }
-    /// Retrieves a list of accounts from the database.
+    /// Loads stored accounts in insertion order.
     ///
-    /// This function connects to the database, executes a query to select all accounts,
-    /// and maps the result rows into a vector of `Account` instances. Each account record
-    /// includes details such as provider type, handle, display name, instance URL, DID,
-    /// and capabilities parsed from a JSON string. The accounts are ordered by their
-    /// insertion row ID in the database.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(Vec<Account>)`: A vector containing all the accounts retrieved from the database
-    ///   on success.
-    /// - `Err(AppError)`: An error if there was an issue with the database connection,
-    ///   preparing or executing the query, or parsing the data.
-    ///
-    /// # Errors
-    ///
-    /// - Returns an error if:
-    ///   - The database connection cannot be established (`self.connection()`).
-    ///   - The SQL query contains a syntax error or cannot be prepared.
-    ///   - The query execution fails.
-    ///   - The field values in the database row cannot be parsed into the corresponding
-    ///     `Account` struct fields (e.g., JSON parsing or type mismatches).
-    ///
-    /// # Example
-    /// ```rust
-    /// let accounts = db.accounts();
-    /// match accounts {
-    ///     Ok(account_list) => {
-    ///         for account in account_list {
-    ///             println!("Account Handle: {}", account.handle);
-    ///         }
-    ///     }
-    ///     Err(err) => eprintln!("Error retrieving accounts: {:?}", err),
-    /// }
-    /// ```
-    ///
-    /// # Dependencies
-    /// This function relies on:
-    /// - The `rusqlite` crate for database operations.
-    /// - The `serde_json` crate for deserializing JSON strings in the `capabilities` field.
+    /// Reconstructs each provider kind and capabilities from its database row.
+    /// Returns an error if SQLite access or capabilities decoding fails.
     pub fn accounts(&self) -> Result<Vec<Account>, AppError> {
         let c = self.connection()?;
         let mut s=c.prepare("SELECT id,provider,handle,display_name,instance_url,did,capabilities_json FROM accounts ORDER BY rowid")?;
