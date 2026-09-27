@@ -1,3 +1,6 @@
+//! Checks the video service sequence: authorize, check limits, upload, and await a blob.
+//! Denial must stop publication before a text-only record is created.
+
 use super::*;
 use crate::{
     models::PreparedPost,
