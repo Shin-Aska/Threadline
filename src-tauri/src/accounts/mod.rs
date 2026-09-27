@@ -1,3 +1,7 @@
+//! Fixed sample accounts used by local demonstrations and selected tests.
+//!
+//! These records are fixtures, not credentials or live provider connections.
+
 use crate::models::*;
 fn caps(max: usize, polls: bool, cw: bool, media: usize) -> PlatformCapabilities {
     PlatformCapabilities {
@@ -12,6 +16,7 @@ fn caps(max: usize, polls: bool, cw: bool, media: usize) -> PlatformCapabilities
         supports_content_warnings: cw,
     }
 }
+/// Returns representative Bluesky and Mastodon accounts with publishing limits.
 pub fn mock_accounts() -> Vec<Account> {
     vec![
         Account {
