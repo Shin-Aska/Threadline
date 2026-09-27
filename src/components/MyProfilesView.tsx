@@ -1,14 +1,16 @@
 import { Layers3, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSocialFeed } from "../hooks/useSocialFeed";
 import { socialApi } from "../services/desktop/social";
 import { presentSocialPosts, type SocialOrder } from "../services/social/presentation";
 import type { WorkspaceState } from "../types";
 import type { ProfileDetails, ProfileFeedKind } from "../types/social";
 import { ProviderIcon } from "./ui";
+import { ExternalLinkWarningSetting } from "./unified/ExternalLinks";
 import { SocialFeedToolbar } from "./unified/SocialFeedToolbar";
 import { SocialPostCard } from "./unified/SocialPostCard";
 import { ViewHeader } from "./unified/ViewHeader";
+import "../styles/profile-rail.css";
 
 interface ProfilesProps {
   readonly workspace: WorkspaceState;
@@ -33,6 +35,29 @@ export function MyProfilesView(props: ProfilesProps) {
   const [order, setOrder] = useState<SocialOrder>("LATEST");
   const [mediaOnly, setMediaOnly] = useState(false);
   const [hideReposts, setHideReposts] = useState(false);
+  const railRef = useRef<HTMLDivElement>(null);
+  const [feedExpanded, setFeedExpanded] = useState(false);
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+
+    const updateRail = () => {
+      const headerHeight = Number.parseFloat(window.getComputedStyle(rail).getPropertyValue("--workspace-header"));
+      const isWide = window.matchMedia("(min-width: 1181px)").matches;
+      setFeedExpanded(isWide && rail.getBoundingClientRect().bottom < headerHeight);
+    };
+    updateRail();
+    window.addEventListener("scroll", updateRail, { passive: true });
+    window.addEventListener("resize", updateRail);
+    const view = rail.closest(".unified-page")?.parentElement;
+    const observer = new MutationObserver(updateRail);
+    if (view) observer.observe(view, { attributes: true, attributeFilter: ["hidden"] });
+    return () => {
+      window.removeEventListener("scroll", updateRail);
+      window.removeEventListener("resize", updateRail);
+      observer.disconnect();
+    };
+  }, []);
   useEffect(() => {
     let current = true;
     setDetails(null); setDetailsError(null);
@@ -42,5 +67,33 @@ export function MyProfilesView(props: ProfilesProps) {
   }, [account]);
   const posts = presentSocialPosts(feed.items, { query, order, mediaOnly: mediaOnly || kind === "MEDIA", hideReposts });
   const controls = <div className="tabs profile-scope"><button className={`button ${account ? "" : "selected"}`} onClick={() => props.onAccount(null)}><Layers3 size={16} />Unified</button>{props.workspace.accounts.map(item => <button className={`button ${item.id === account?.id ? "selected" : ""}`} key={item.id} onClick={() => props.onAccount(item.id)}><ProviderIcon provider={item.provider} />{item.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</button>)}</div>;
-  return <div className="unified-page"><ViewHeader icon={<Users />} title="My profiles" subtitle="Your public timeline on each connected account." controls={controls} /><div className="unified-layout"><section className="feed-column">{account ? <section className="panel profile-header"><div className="post-avatar">{details?.actor.avatarUrl ? <img src={details.actor.avatarUrl} alt="" /> : account.displayName[0]}</div><div className="profile-line"><div><h2>{details?.actor.displayName ?? account.displayName}</h2><span className="muted">@{details?.actor.handle ?? account.handle} · {account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span></div><span className={`provider-pill ${account.provider.toLowerCase()}`}>Your profile</span></div>{details?.description && <p>{details.description}</p>}{details && <div className="profile-stats"><span><strong>{details.followingCount?.toLocaleString() ?? "—"}</strong> Following</span><span><strong>{details.followersCount?.toLocaleString() ?? "—"}</strong> Followers</span><span><strong>{details.postsCount?.toLocaleString() ?? "—"}</strong> Posts</span></div>}{detailsError && <p className="inline-error" role="alert">{detailsError}</p>}</section> : <section className="panel profile-header"><h2>Your unified profile timeline</h2><p>Posts from all {accounts.length} connected {accounts.length === 1 ? "account" : "accounts"}, together in one timeline with provider attribution.</p></section>}<div className="tabs">{kinds.map(item => <button className={`button ${kind === item.value ? "selected" : ""}`} key={item.value} onClick={() => setKind(item.value)}>{item.label}</button>)}</div><SocialFeedToolbar query={query} order={order} mediaOnly={mediaOnly} hideReposts={hideReposts} onQuery={setQuery} onOrder={setOrder} onMediaOnly={setMediaOnly} onHideReposts={setHideReposts} />{feed.loading && feed.items.length === 0 ? <div className="post-skeletons" aria-label="Loading profile posts"><i /><i /></div> : <div className="row-list">{posts.map(item => <SocialPostCard key={item.post.canonicalKey} item={item} accounts={props.workspace.accounts} onPost={props.onPost} onProfile={(accountId) => props.onAccount(accountId)} onTag={props.onTag} />)}</div>}{!feed.loading && posts.length === 0 && <section className="panel empty-box">No posts match this profile view.</section>}{feed.hasMore && <button className="button load-more" disabled={feed.loading} onClick={() => void feed.more()}>{feed.loading ? "Loading…" : "Load more"}</button>}</section><aside className="details-column"><section className="panel"><h2>Connected profiles</h2>{props.workspace.accounts.map(item => <button className="actor-row click-row" key={item.id} onClick={() => props.onAccount(item.id)}><ProviderIcon provider={item.provider} /><span><strong>{item.displayName}</strong><small>@{item.handle}</small></span></button>)}</section><section className="panel"><h2>Your account</h2><p className="aside-copy section-space">{account ? `You are viewing only posts from ${account.displayName}'s ${account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} profile.` : "You are viewing posts from all connected profiles."} Home Timeline reading scope stays separate.</p><button className="button" onClick={props.onAccounts}>Manage accounts</button></section></aside></div></div>;
+  return <div className="unified-page">
+    <ViewHeader icon={<Users />} title="My profiles" subtitle="Your public timeline on each connected account." controls={controls} />
+    <div className={`unified-layout profile-layout ${feedExpanded ? "profile-feed-expanded" : ""}`}>
+      <aside className="details-column profile-details-column" aria-label="Profile context">
+        <div ref={railRef} className="profile-rail">
+          <section className="panel profile-rail-profiles">
+            <h2>Connected profiles</h2>
+            <div className="profile-rail-list">
+              {props.workspace.accounts.map(item => <button className="actor-row click-row" key={item.id} onClick={() => props.onAccount(item.id)} aria-current={item.id === account?.id ? "true" : undefined}><ProviderIcon provider={item.provider} /><span><strong>{item.displayName}</strong><small>@{item.handle}</small></span></button>)}
+            </div>
+          </section>
+          <section className="panel profile-rail-account">
+            <h2>Your account</h2>
+            <p className="aside-copy section-space">{account ? `You are viewing only posts from ${account.displayName}'s ${account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} profile.` : "You are viewing posts from all connected profiles."} Home Timeline reading scope stays separate.</p>
+            <ExternalLinkWarningSetting />
+            <button className="button" onClick={props.onAccounts}>Manage accounts</button>
+          </section>
+        </div>
+      </aside>
+      <section className="feed-column">
+        {account ? <section className="panel profile-header"><div className="post-avatar">{details?.actor.avatarUrl ? <img src={details.actor.avatarUrl} alt="" /> : account.displayName[0]}</div><div className="profile-line"><div><h2>{details?.actor.displayName ?? account.displayName}</h2><span className="muted">@{details?.actor.handle ?? account.handle} · {account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span></div><span className={`provider-pill ${account.provider.toLowerCase()}`}>Your profile</span></div>{details?.description && <p>{details.description}</p>}{details && <div className="profile-stats"><span><strong>{details.followingCount?.toLocaleString() ?? "—"}</strong> Following</span><span><strong>{details.followersCount?.toLocaleString() ?? "—"}</strong> Followers</span><span><strong>{details.postsCount?.toLocaleString() ?? "—"}</strong> Posts</span></div>}{detailsError && <p className="inline-error" role="alert">{detailsError}</p>}</section> : <section className="panel profile-header"><h2>Your unified profile timeline</h2><p>Posts from all {accounts.length} connected {accounts.length === 1 ? "account" : "accounts"}, together in one timeline with provider attribution.</p></section>}
+        <div className="tabs">{kinds.map(item => <button className={`button ${kind === item.value ? "selected" : ""}`} key={item.value} onClick={() => setKind(item.value)}>{item.label}</button>)}</div>
+        <SocialFeedToolbar query={query} order={order} mediaOnly={mediaOnly} hideReposts={hideReposts} onQuery={setQuery} onOrder={setOrder} onMediaOnly={setMediaOnly} onHideReposts={setHideReposts} />
+        {feed.loading && feed.items.length === 0 ? <div className="post-skeletons" aria-label="Loading profile posts"><i /><i /></div> : <div className="row-list">{posts.map(item => <SocialPostCard key={item.post.canonicalKey} item={item} accounts={props.workspace.accounts} onPost={props.onPost} onProfile={(accountId) => props.onAccount(accountId)} onTag={props.onTag} />)}</div>}
+        {!feed.loading && posts.length === 0 && <section className="panel empty-box">No posts match this profile view.</section>}
+        {feed.hasMore && <button className="button load-more" disabled={feed.loading} onClick={() => void feed.more()}>{feed.loading ? "Loading…" : "Load more"}</button>}
+      </section>
+    </div>
+  </div>;
 }
