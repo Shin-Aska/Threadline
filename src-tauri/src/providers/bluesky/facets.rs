@@ -1,3 +1,5 @@
+//! Converts hashtags in post text to AT Protocol rich-text facets with UTF-8 byte ranges.
+
 use crate::error::AppError;
 use regex::Regex;
 use serde::Serialize;
@@ -11,23 +13,27 @@ static PATTERNS: LazyLock<Result<(Regex, Regex, Regex), regex::Error>> = LazyLoc
         Regex::new(r"[^\d\s\p{P}]")?,
     ))
 });
+/// Serialized AT Protocol facet marking one hashtag span in UTF-8 bytes.
 #[derive(Debug, Serialize)]
 pub struct Facet {
     index: ByteRange,
     features: Vec<Tag>,
 }
+/// Half-open byte offsets into the original post text.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ByteRange {
     byte_start: usize,
     byte_end: usize,
 }
+/// Hashtag feature attached to one rich-text facet.
 #[derive(Debug, Serialize)]
 struct Tag {
     #[serde(rename = "$type")]
     kind: &'static str,
     tag: String,
 }
+/// Finds valid hashtags and returns facets whose offsets index the original UTF-8 text.
 pub fn hashtags(text: &str) -> Result<Vec<Facet>, AppError> {
     let (pattern, punctuation, meaningful) = PATTERNS
         .as_ref()
