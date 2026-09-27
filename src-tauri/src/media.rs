@@ -1,3 +1,4 @@
+//! Validates attachment metadata and content before provider uploads.
 use crate::{
     error::AppError,
     models::{Account, MediaAttachment, PreparedMedia},
@@ -5,12 +6,16 @@ use crate::{
 use base64::{engine::general_purpose::STANDARD, Engine};
 use std::sync::Arc;
 
+/// Maximum number of images in a post without video.
 pub const MAX_IMAGES: usize = 4;
+/// Maximum declared and decoded image size in bytes.
 pub const MAX_IMAGE_BYTES: usize = 2_000_000;
+/// Maximum Unicode character count for attachment alt text.
 pub const MAX_ALT_CHARS: usize = 1_500;
 const IMAGE_TYPES: [&str; 3] = ["image/jpeg", "image/png", "image/webp"];
 const VIDEO_TYPE: &str = "video/mp4";
 
+/// Checks attachment metadata against common and destination-specific limits.
 pub fn validate(media: &[MediaAttachment], accounts: &[&Account]) -> Result<(), AppError> {
     let video = media.iter().find(|item| item.mime_type == VIDEO_TYPE);
     if video.is_some() && media.len() != 1 {
@@ -91,6 +96,7 @@ pub fn validate(media: &[MediaAttachment], accounts: &[&Account]) -> Result<(), 
     Ok(())
 }
 
+/// Decodes attachments and verifies their declared sizes and file signatures.
 pub fn prepare(media: &[MediaAttachment]) -> Result<Vec<PreparedMedia>, AppError> {
     validate(media, &[])?;
     media
@@ -192,4 +198,5 @@ fn read_u64(bytes: &[u8]) -> Option<u64> {
 
 #[cfg(test)]
 #[path = "media_tests.rs"]
+/// Covers attachment limits, signatures, video metadata, and preserved alt text.
 mod tests;
