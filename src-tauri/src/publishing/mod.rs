@@ -16,6 +16,7 @@ use crate::{
     AppState,
 };
 
+/// Begins or resumes publication of the latest persisted draft by ID.
 pub async fn publish_draft(
     state: &AppState,
     draft_id: &str,
@@ -25,6 +26,7 @@ pub async fn publish_draft(
     dispatch_post(state, draft.post, ledger).await
 }
 
+/// Publishes the post snapshot captured in a claimed schedule.
 pub async fn publish_scheduled(
     state: &AppState,
     schedule: &ScheduledPublication,
@@ -217,4 +219,5 @@ async fn dispatch_destination(
 }
 
 #[cfg(test)]
+/// Covers uncertain remote outcomes, concurrent claims, and schedule snapshots.
 mod tests;
