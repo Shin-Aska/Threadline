@@ -1,10 +1,12 @@
-import { ExternalLink, Heart, MessageCircle, Repeat2 } from "lucide-react";
+import { ExternalLink as ExternalLinkIcon, Heart, MessageCircle, Repeat2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { socialApi, subscribeSocialActions } from "../../services/desktop/social";
 import type { SocialFeedItem } from "../../services/social/presentation";
 import type { Account } from "../../types";
 import type { ViewerState } from "../../types/social";
 import { ProviderIcon } from "../ui";
+import { ExternalLink, LinkifiedText } from "./ExternalLinks";
+import { ImageViewer } from "./ImageViewer";
 
 interface SocialPostProps {
   readonly item: SocialFeedItem;
@@ -21,6 +23,7 @@ export function SocialPostCard({ item, accounts, onPost, onProfile, onTag }: Soc
   const [metrics, setMetrics] = useState(item.post.metrics);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{ readonly url: string; readonly alt: string } | null>(null);
   useEffect(() => { setAccountId(firstAccount); }, [item.post.canonicalKey, firstAccount]);
   useEffect(() => { setMetrics(item.post.metrics); }, [item.post.metrics]);
   useEffect(() => subscribeSocialActions((actingAccountId, action, result) => {
@@ -50,6 +53,20 @@ export function SocialPostCard({ item, accounts, onPost, onProfile, onTag }: Soc
   };
   const acting = accounts.find(account => account.id === accountId);
   const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - Date.parse(item.post.createdAt)) / 3600000)), "hour");
-  const text = item.post.text.split(/(#[\p{L}\p{N}_]+)/u);
-  return <article className="unified-post"><button className="post-avatar quiet" aria-label={`View ${item.post.author.displayName}'s profile`} onClick={() => onProfile(accountId, item.post.author.id)}>{item.post.author.avatarUrl ? <img src={item.post.author.avatarUrl} alt="" /> : item.post.author.displayName[0]}</button><div className="post-content"><header><button className="author-link quiet" onClick={() => onProfile(accountId, item.post.author.id)}>{item.post.author.displayName}</button><span>@{item.post.author.handle.replace(/^@/, "")}</span><span className={`provider-pill ${item.post.provider.toLowerCase()}`}><ProviderIcon provider={item.post.provider} />{item.post.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span><time dateTime={item.post.createdAt}><button className="quiet" onClick={() => onPost(accountId, item.post.remoteId)}>{relative}</button></time></header><p>{text.map((part, index) => part.startsWith("#") ? <button className="link quiet" key={`${part}-${index}`} onClick={() => onTag(accountId, part.slice(1))}>{part}</button> : part)}</p>{item.post.media.length > 0 && <div className="post-media">{item.post.media.map(media => media.mediaType.startsWith("video") || media.mediaType === "gifv" ? <video key={media.url} src={media.url} controls preload="metadata" aria-label={media.alt || "Post video"} /> : <img key={media.url} src={media.url} alt={media.alt} />)}</div>}<div className="action-identity"><label>Act as <select value={accountId} onChange={event => setAccountId(event.target.value)}>{item.observations.map(observation => { const account = accounts.find(account => account.id === observation.accountId); return <option value={observation.accountId} key={observation.accountId}>{account?.displayName ?? observation.accountId} · {account?.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</option>; })}</select></label></div><footer><button onClick={() => onPost(accountId, item.post.remoteId)}><MessageCircle size={15} />{metrics.replies ?? "—"}</button><button disabled={pending} className={viewer.reposted ? "on" : ""} aria-pressed={viewer.reposted} onClick={() => void act("REPOST")}><Repeat2 size={15} />{metrics.reposts ?? "—"}</button><button disabled={pending} className={viewer.liked ? "on" : ""} aria-pressed={viewer.liked} onClick={() => void act("LIKE")}><Heart size={15} />{metrics.likes ?? "—"}</button><a href={item.post.remoteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />Original</a><span className="via">Via {acting?.displayName ?? "selected account"} · {item.post.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span></footer>{error && <p className="inline-error" role="alert">{error}</p>}</div></article>;
+  const openConversation = () => onPost(accountId, item.post.remoteId);
+  return <>
+    <article className="unified-post post-openable" onClick={event => { if (event.target instanceof Element && !event.target.closest("button, a, select, input, textarea, video") && !window.getSelection()?.toString()) openConversation(); }}>
+      <button type="button" className="post-surface-action" aria-label={`Open conversation by ${item.post.author.displayName}`} onClick={openConversation} />
+      <button className="post-avatar quiet" aria-label={`View ${item.post.author.displayName}'s profile`} onClick={() => onProfile(accountId, item.post.author.id)}>{item.post.author.avatarUrl ? <img src={item.post.author.avatarUrl} alt="" /> : item.post.author.displayName[0]}</button>
+      <div className="post-content">
+        <header><button className="author-link quiet" onClick={() => onProfile(accountId, item.post.author.id)}>{item.post.author.displayName}</button><span>@{item.post.author.handle.replace(/^@/, "")}</span><span className={`provider-pill ${item.post.provider.toLowerCase()}`}><ProviderIcon provider={item.post.provider} />{item.post.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span><time dateTime={item.post.createdAt}><button className="quiet" onClick={openConversation}>{relative}</button></time></header>
+        <p><LinkifiedText text={item.post.text} onTag={tag => onTag(accountId, tag)} /></p>
+        {item.post.media.length > 0 && <div className="post-media">{item.post.media.map(media => media.mediaType.startsWith("video") || media.mediaType === "gifv" ? <video key={media.url} src={media.url} controls preload="metadata" aria-label={media.alt || "Post video"} /> : <button type="button" key={media.url} aria-label={`View image: ${media.alt || "Post image"}`} onClick={() => setSelectedImage({ url: media.url, alt: media.alt })}><img src={media.url} alt={media.alt} /></button>)}</div>}
+        <div className="action-identity"><label>Act as <select value={accountId} onChange={event => setAccountId(event.target.value)}>{item.observations.map(observation => { const account = accounts.find(account => account.id === observation.accountId); return <option value={observation.accountId} key={observation.accountId}>{account?.displayName ?? observation.accountId} · {account?.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</option>; })}</select></label></div>
+        <footer><button aria-label={`Open conversation with ${item.post.author.displayName}`} onClick={openConversation}><MessageCircle size={15} />{metrics.replies ?? "—"}</button><button disabled={pending} className={viewer.reposted ? "on" : ""} aria-pressed={viewer.reposted} onClick={() => void act("REPOST")}><Repeat2 size={15} />{metrics.reposts ?? "—"}</button><button disabled={pending} className={viewer.liked ? "on" : ""} aria-pressed={viewer.liked} onClick={() => void act("LIKE")}><Heart size={15} />{metrics.likes ?? "—"}</button><ExternalLink href={item.post.remoteUrl}><ExternalLinkIcon size={15} />Original</ExternalLink><span className="via">Via {acting?.displayName ?? "selected account"} · {item.post.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span></footer>
+        {error && <p className="inline-error" role="alert">{error}</p>}
+      </div>
+    </article>
+    {selectedImage && <ImageViewer src={selectedImage.url} alt={selectedImage.alt} onClose={() => setSelectedImage(null)} />}
+  </>;
 }

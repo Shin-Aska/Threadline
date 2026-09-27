@@ -1,0 +1,13 @@
+.external-post-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.external-post-link:hover { color: var(--text); }
+.external-link-dialog { width: min(420px, calc(100% - var(--space-6) * 2)); max-height: calc(100dvh - var(--space-6) * 2); overflow-y: auto; padding: var(--space-6); border: 1px solid var(--high); border-radius: var(--radius-lg); background: var(--panel); color: var(--text); box-shadow: var(--popup-shadow); }
+.external-link-dialog::backdrop { background: color-mix(in srgb, var(--inset) 72%, transparent); }
+.external-link-dialog h2 { font-size: var(--font-section); line-height: 24px; }
+.external-link-dialog p { margin-top: var(--space-4); color: var(--text-secondary); }
+.external-link-dialog strong { color: var(--text); }
+.external-link-destination { padding: var(--space-3); border: 1px solid var(--edge); border-radius: var(--radius); background: var(--inset); font: var(--font-caption)/20px var(--mono); overflow-wrap: anywhere; }
+.external-link-remember, .external-link-setting { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-5); color: var(--text-secondary); cursor: pointer; }
+.external-link-remember input, .external-link-setting input { width: 16px; height: 16px; flex: none; accent-color: var(--blue); }
+.external-link-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
+.external-link-actions .button { display: inline-flex; align-items: center; justify-content: center; min-width: 96px; text-decoration: none; }
+@media (max-width: 600px) { .external-link-actions .button { min-height: 44px; } }

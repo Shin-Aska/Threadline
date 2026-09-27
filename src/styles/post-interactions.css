@@ -1,0 +1,10 @@
+.post-openable { position: relative; cursor: pointer; }
+.post-openable:hover, .post-openable:has(> .post-surface-action:focus-visible) { border-color: color-mix(in srgb, var(--primary) 45%, var(--edge)); }
+.post-openable:has(> .post-surface-action:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.post-surface-action { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; color: transparent; cursor: pointer; }
+.post-surface-action:focus-visible { outline: none; }
+.post-openable > .post-avatar, .post-openable > .post-content { position: relative; }
+.post-openable button, .post-openable a, .post-openable select, .post-openable video { cursor: auto; }
+.post-openable button, .post-openable a, .post-openable select { cursor: pointer; }
+.post-media button { display: block; min-width: 0; width: 100%; padding: 0; border: 0; border-radius: var(--radius-lg); background: transparent; overflow: hidden; cursor: zoom-in; }
+.post-media button img { display: block; width: 100%; max-height: 300px; object-fit: cover; }
