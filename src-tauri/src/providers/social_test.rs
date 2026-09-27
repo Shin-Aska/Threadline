@@ -1,3 +1,5 @@
+//! Checks normalized social reads and provider actions through recorded HTTP requests.
+
 use super::{
     bluesky::BlueskyProvider, mastodon::MastodonProvider, social::ProfileFeedKind, SocialProvider,
 };
