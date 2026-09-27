@@ -1,3 +1,8 @@
+//! Mastodon account transport for authenticated reads, actions, and publishing.
+//!
+//! The account's instance URL scopes every request. Child modules handle
+//! normalization, discovery, media upload, and social API operations.
+
 mod capabilities;
 mod discovery;
 mod hashtags;
