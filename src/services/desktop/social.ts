@@ -10,6 +10,7 @@ import type {
   SourcePage,
   ThreadView,
 } from "../../types/social";
+import { readPostCacheLimit, savePostCacheLimit, type PostCacheLimit } from "./post-cache-settings";
 import { invalidateAroundMutation, SocialReadCache } from "./social-cache";
 
 export interface SocialReadOptions {
@@ -27,7 +28,11 @@ interface CachedCall {
 const CONTENT_TTL_MS = 30_000;
 const NOTIFICATION_TTL_MS = 20_000;
 const REFERENCE_TTL_MS = 120_000;
-const cache = new SocialReadCache({ maxEntries: 96 });
+let postCacheLimit = readPostCacheLimit();
+const cache = new SocialReadCache({ maxEntries: 96, maxPosts: postCacheLimit });
+const feedPostCount = (page: FeedPage): number => page.posts.length;
+const threadPostCount = (thread: ThreadView): number => thread.ancestors.length + 1 + thread.replies.length;
+const notificationPostCount = (page: NotificationPage): number => page.notifications.filter(item => item.post !== null).length;
 type SocialActionListener = (accountId: string, action: SocialAction, result: SocialActionResult) => void;
 const actionListeners = new Set<SocialActionListener>();
 
@@ -39,12 +44,13 @@ export function subscribeSocialActions(listener: SocialActionListener): () => vo
 const call = <T>(command: string, args: Readonly<Record<string, unknown>>): Promise<T> =>
   invoke<T>(command, args);
 
-const cachedCall = <T>(request: CachedCall): Promise<T> => cache.read({
+const cachedCall = <T>(request: CachedCall, countPosts?: (value: T) => number): Promise<T> => cache.read<T>({
   accountId: request.accountId,
   command: request.command,
   args: request.args,
   ttlMs: request.ttlMs,
   refresh: request.options?.refresh,
+  ...(countPosts ? { countPosts } : {}),
   load: () => call<T>(request.command, request.args),
 });
 
@@ -56,27 +62,35 @@ export const invalidateSocialReadCache = (accountId?: string): void => {
   else cache.invalidateAccount(accountId);
 };
 
+export const getPostCacheLimit = (): PostCacheLimit => postCacheLimit;
+
+export const setPostCacheLimit = (limit: PostCacheLimit): void => {
+  savePostCacheLimit(limit);
+  cache.setMaxPosts(limit);
+  postCacheLimit = limit;
+};
+
 export const socialApi = {
   home: (accountId: string, cursor: string | null = null, options?: SocialReadOptions): Promise<FeedPage> =>
-    cachedCall({ accountId, command: "get_home_feed", args: { accountId, cursor }, ttlMs: CONTENT_TTL_MS, options }),
+    cachedCall<FeedPage>({ accountId, command: "get_home_feed", args: { accountId, cursor }, ttlMs: CONTENT_TTL_MS, options }, feedPostCount),
   own: (accountId: string, kind: ProfileFeedKind, cursor: string | null = null, options?: SocialReadOptions): Promise<FeedPage> =>
-    cachedCall({ accountId, command: "get_own_feed", args: { accountId, kind, cursor }, ttlMs: CONTENT_TTL_MS, options }),
+    cachedCall<FeedPage>({ accountId, command: "get_own_feed", args: { accountId, kind, cursor }, ttlMs: CONTENT_TTL_MS, options }, feedPostCount),
   ownProfile: (accountId: string, options?: SocialReadOptions): Promise<ProfileDetails> =>
-    cachedCall({ accountId, command: "get_own_profile", args: { accountId }, ttlMs: REFERENCE_TTL_MS, options }),
+    cachedCall<ProfileDetails>({ accountId, command: "get_own_profile", args: { accountId }, ttlMs: REFERENCE_TTL_MS, options }),
   profile: (accountId: string, profileId: string, options?: SocialReadOptions): Promise<ProfileDetails> =>
-    cachedCall({ accountId, command: "get_profile", args: { accountId, profileId }, ttlMs: REFERENCE_TTL_MS, options }),
+    cachedCall<ProfileDetails>({ accountId, command: "get_profile", args: { accountId, profileId }, ttlMs: REFERENCE_TTL_MS, options }),
   profileFeed: (accountId: string, profileId: string, kind: ProfileFeedKind, cursor: string | null = null, options?: SocialReadOptions): Promise<FeedPage> =>
-    cachedCall({ accountId, command: "get_profile_feed", args: { accountId, profileId, kind, cursor }, ttlMs: CONTENT_TTL_MS, options }),
+    cachedCall<FeedPage>({ accountId, command: "get_profile_feed", args: { accountId, profileId, kind, cursor }, ttlMs: CONTENT_TTL_MS, options }, feedPostCount),
   thread: (accountId: string, postId: string, options?: SocialReadOptions): Promise<ThreadView> =>
-    cachedCall({ accountId, command: "get_thread", args: { accountId, postId }, ttlMs: CONTENT_TTL_MS, options }),
+    cachedCall<ThreadView>({ accountId, command: "get_thread", args: { accountId, postId }, ttlMs: CONTENT_TTL_MS, options }, threadPostCount),
   tagFeed: (accountId: string, tag: string, cursor: string | null = null, options?: SocialReadOptions): Promise<FeedPage> =>
-    cachedCall({ accountId, command: "get_tag_feed", args: { accountId, tag, cursor }, ttlMs: CONTENT_TTL_MS, options }),
+    cachedCall<FeedPage>({ accountId, command: "get_tag_feed", args: { accountId, tag, cursor }, ttlMs: CONTENT_TTL_MS, options }, feedPostCount),
   following: (accountId: string, cursor: string | null = null, options?: SocialReadOptions): Promise<SourcePage> =>
-    cachedCall({ accountId, command: "get_followed_sources", args: { accountId, cursor }, ttlMs: REFERENCE_TTL_MS, options }),
+    cachedCall<SourcePage>({ accountId, command: "get_followed_sources", args: { accountId, cursor }, ttlMs: REFERENCE_TTL_MS, options }),
   sourceFeed: (accountId: string, source: FollowedSource, cursor: string | null = null, options?: SocialReadOptions): Promise<FeedPage> =>
-    cachedCall({ accountId, command: "get_source_feed", args: { accountId, source, cursor }, ttlMs: CONTENT_TTL_MS, options }),
+    cachedCall<FeedPage>({ accountId, command: "get_source_feed", args: { accountId, source, cursor }, ttlMs: CONTENT_TTL_MS, options }, feedPostCount),
   notifications: (accountId: string, cursor: string | null = null, options?: SocialReadOptions): Promise<NotificationPage> =>
-    cachedCall({ accountId, command: "get_notifications", args: { accountId, cursor }, ttlMs: NOTIFICATION_TTL_MS, options }),
+    cachedCall<NotificationPage>({ accountId, command: "get_notifications", args: { accountId, cursor }, ttlMs: NOTIFICATION_TTL_MS, options }, notificationPostCount),
   markNotificationsRead: (accountId: string, notificationIds: readonly string[]): Promise<void> =>
     mutate(accountId, "mark_notifications_read", { accountId, notificationIds }),
   act: async (accountId: string, action: SocialAction): Promise<SocialActionResult> => {
