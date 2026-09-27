@@ -1,3 +1,6 @@
+//! Checks media upload bodies, processing completion, attachment references,
+//! and failure before publication.
+
 use super::test_http::server;
 use super::{bluesky::BlueskyProvider, mastodon::MastodonProvider, SocialProvider};
 use crate::models::{PreparedMedia, PreparedPost};
