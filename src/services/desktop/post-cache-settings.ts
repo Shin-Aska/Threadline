@@ -9,12 +9,18 @@ export function readPostCacheLimit(): PostCacheLimit {
   try {
     const saved = localStorage.getItem(PREFERENCE_KEY);
     return POST_CACHE_LIMITS.find(limit => String(limit) === saved) ?? DEFAULT_LIMIT;
-  } catch (cause) {
-    if (cause instanceof DOMException) return DEFAULT_LIMIT;
-    throw cause;
+  } catch {
+    // Storage can be disabled, blocked by policy, or replaced by an embedding
+    // webview implementation that throws something other than DOMException.
+    return DEFAULT_LIMIT;
   }
 }
 
 export function savePostCacheLimit(limit: PostCacheLimit): void {
-  localStorage.setItem(PREFERENCE_KEY, String(limit));
+  try {
+    localStorage.setItem(PREFERENCE_KEY, String(limit));
+  } catch {
+    // The in-memory setting still applies for this session when persistence is
+    // unavailable. Provider responses are never written to browser storage.
+  }
 }
