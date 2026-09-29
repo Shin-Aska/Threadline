@@ -32,6 +32,73 @@ fn bluesky(service_url: String) -> BlueskyProvider {
 }
 
 #[tokio::test]
+async fn mastodon_repost_recovers_when_previous_unreblog_is_still_being_removed() {
+    // Given Mastodon accepts a boost and its undo, but briefly rejects the next boost.
+    let boosted = r#"{"id":"99","created_at":"2026-09-20T01:00:00Z","account":{"id":"7","acct":"me"},"reblogged":true,"reblog":{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"Hello","account":{"id":"8","acct":"alice"}}}"#;
+    let original = r#"{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"Hello","account":{"id":"8","acct":"alice"},"reblogged":false}"#;
+    let (url, server) = super::test_http::server(vec![
+        (200, boosted),
+        (200, original),
+        (
+            422,
+            r#"{"error":"Validation failed: Reblog has already been taken"}"#,
+        ),
+        (200, boosted),
+    ]);
+    let provider = mastodon(url);
+    let repost = || super::social::SocialAction::Repost {
+        post_id: "42".into(),
+    };
+
+    // When the user reposts, undoes, and reposts again without waiting.
+    provider.social_action(repost()).await.expect("first boost");
+    provider
+        .social_action(super::social::SocialAction::UndoRepost {
+            post_id: "42".into(),
+        })
+        .await
+        .expect("undo boost");
+    let result = provider
+        .social_action(repost())
+        .await
+        .expect("boost should recover after transient 422");
+
+    // Then the final boost succeeds against the original status ID.
+    assert!(result.viewer.is_some_and(|viewer| viewer.reposted));
+    let requests = server.join().expect("server");
+    assert_eq!(requests.len(), 4);
+    assert!(requests[0]
+        .headers
+        .starts_with("POST /api/v1/statuses/42/reblog "));
+    assert!(requests[1]
+        .headers
+        .starts_with("POST /api/v1/statuses/42/unreblog "));
+    assert!(requests[2]
+        .headers
+        .starts_with("POST /api/v1/statuses/42/reblog "));
+    assert!(requests[3]
+        .headers
+        .starts_with("POST /api/v1/statuses/42/reblog "));
+}
+
+#[tokio::test]
+async fn mastodon_repost_surfaces_422_after_bounded_retries() {
+    let rejection = r#"{"error":"Reblog cannot be created"}"#;
+    let (url, server) = super::test_http::server(vec![(422, rejection); 5]);
+
+    let error = mastodon(url)
+        .social_action(super::social::SocialAction::Repost {
+            post_id: "42".into(),
+        })
+        .await
+        .expect_err("persistent rejection must be reported");
+
+    assert!(error.to_string().contains("422"));
+    assert!(error.to_string().contains("Reblog cannot be created"));
+    assert_eq!(server.join().expect("server").len(), 5);
+}
+
+#[tokio::test]
 async fn mastodon_profile_feed_normalizes_viewer_state_and_cursor() {
     // Given an account status response from a real HTTP boundary.
     let body = r#"[{"id":"42","url":"https://social.test/@alice/42","created_at":"2026-09-20T01:00:00Z","content":"<p>Hello</p>","account":{"id":"7","acct":"alice","display_name":"Alice","avatar":"https://social.test/a.png"},"media_attachments":[],"replies_count":2,"reblogs_count":3,"favourites_count":4,"favourited":true,"reblogged":false,"in_reply_to_id":null}]"#;
