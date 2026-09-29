@@ -42,3 +42,31 @@ jobs:
           cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml --check
           cargo +1.98.1 clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
           cargo +1.98.1 test --locked --manifest-path src-tauri/Cargo.toml --all-targets
+
+  appimage-smoke:
+    name: AppImage smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.14.1'
+      - name: Install AppImage build and smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf file gstreamer1.0-plugins-good gstreamer1.0-pulseaudio xvfb dbus-x11
+      - run: rustup toolchain install 1.98.1 --profile minimal
+      - run: npm ci
+      - run: npm run tauri -- build --ci --bundles appimage -- --locked
+      - name: Audit and start packaged AppImage
+        run: |
+          image=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name 'Threadline*.AppImage' -print -quit)
+          scripts/audit-appimage.sh "$image"
+          scripts/smoke-appimage.sh "$image"

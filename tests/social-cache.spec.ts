@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { invalidateAroundMutation, SocialReadCache } from "../src/services/desktop/social-cache";
+import { boundFeedPages, boundNotificationPages, VIEW_POST_LIMIT } from "../src/services/social/retention";
+import type { FeedPage, NotificationPage } from "../src/types/social";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -74,6 +76,97 @@ test("bounds retained entries", async () => {
 
   expect(invocations).toBe(4);
   expect(cache.size).toBe(2);
+});
+
+test("evicts least-recently-used responses when the aggregate post budget is exceeded", async () => {
+  let invocations = 0;
+  const cache = new SocialReadCache({ maxEntries: 8, maxPosts: 3 });
+  const request = (cursor: string, posts: number) => cache.read({ accountId: "account-a", command: "get_home_feed", args: { cursor }, ttlMs: 30_000, countPosts: value => value.posts, load: async () => ({ invocation: ++invocations, posts }) });
+  await request("one", 2);
+  await request("two", 1);
+  await request("one", 2); // promote one
+  await request("three", 1); // evicts two
+  await request("two", 1);
+  expect(invocations).toBe(4);
+});
+
+test("lowering the post budget evicts immediately and oversized responses are not reused", async () => {
+  let invocations = 0;
+  const cache = new SocialReadCache({ maxEntries: 8, maxPosts: 10 });
+  const request = (key: string, posts: number) => cache.read({ accountId: "account-a", command: "feed", args: { key }, ttlMs: 30_000, countPosts: value => value.posts, load: async () => ({ posts, invocation: ++invocations }) });
+  await request("one", 4);
+  await request("two", 4);
+  cache.setMaxPosts(3);
+  expect(cache.size).toBe(0);
+  await request("large", 4);
+  await request("large", 4);
+  expect(invocations).toBe(4);
+});
+
+test("Off coalesces pending reads but does not reuse a completed post response", async () => {
+  const pending = deferred<{ posts: readonly number[] }>();
+  let invocations = 0;
+  const cache = new SocialReadCache({ maxEntries: 8, maxPosts: 0 });
+  const request = () => cache.read({ accountId: "account-a", command: "feed", args: {}, ttlMs: 30_000, countPosts: value => value.posts.length, load: () => { invocations += 1; return invocations === 1 ? pending.promise : Promise.resolve({ posts: [2] }); } });
+  const first = request();
+  const coalesced = request();
+  pending.resolve({ posts: [1] });
+  expect(await first).toEqual({ posts: [1] });
+  expect(await coalesced).toEqual({ posts: [1] });
+  expect(await request()).toEqual({ posts: [2] });
+  expect(invocations).toBe(2);
+});
+
+test("feed and notification mounted state has a deterministic post bound", () => {
+  const posts = Array.from({ length: VIEW_POST_LIMIT + 20 }, (_, id) => ({ remoteId: String(id) }));
+  const feeds = boundFeedPages({ a: { posts, cursor: "more" } as unknown as FeedPage });
+  expect(feeds.a?.posts).toHaveLength(VIEW_POST_LIMIT);
+  expect(feeds.a?.cursor).toBeNull();
+
+  const notifications = Array.from({ length: VIEW_POST_LIMIT + 20 }, (_, id) => ({ id: String(id), post: { remoteId: String(id) } }));
+  const pages = boundNotificationPages({ a: { notifications, cursor: "more" } as unknown as NotificationPage });
+  expect(pages.a?.notifications).toHaveLength(VIEW_POST_LIMIT);
+  expect(pages.a?.cursor).toBeNull();
+});
+
+test("mounted feed bound is aggregate across retained account and source pages", () => {
+  const page = (prefix: string): FeedPage => ({ posts: Array.from({ length: 300 }, (_, id) => ({ remoteId: `${prefix}-${id}` })) as unknown as FeedPage["posts"], cursor: "more" });
+  const bounded = boundFeedPages({ accountA: page("a"), accountB: page("b"), sourceC: page("c") });
+  expect(Object.values(bounded).reduce((total, value) => total + value.posts.length, 0)).toBe(VIEW_POST_LIMIT);
+  expect(Object.values(bounded).every(value => value.cursor === null)).toBe(true);
+});
+
+test("repeated pagination across retained views cannot grow post state past its per-view bound", () => {
+  let timeline: Readonly<Record<string, FeedPage>> = {};
+  let following: Readonly<Record<string, FeedPage>> = {};
+  let notifications: Readonly<Record<string, NotificationPage>> = {};
+  for (let pageNumber = 0; pageNumber < 12; pageNumber += 1) {
+    const posts = Array.from({ length: 60 }, (_, id) => ({ remoteId: `feed-${pageNumber}-${id}` })) as unknown as FeedPage["posts"];
+    timeline = boundFeedPages({ account: { posts: [...(timeline.account?.posts ?? []), ...posts], cursor: "more" } });
+    following = boundFeedPages({ source: { posts: [...(following.source?.posts ?? []), ...posts], cursor: "more" } });
+    const incoming = Array.from({ length: 60 }, (_, id) => ({ id: `notification-${pageNumber}-${id}`, post: { remoteId: String(id) } }));
+    notifications = boundNotificationPages({ account: { notifications: [...(notifications.account?.notifications ?? []), ...incoming], cursor: "more" } as unknown as NotificationPage });
+  }
+  expect(timeline.account?.posts).toHaveLength(VIEW_POST_LIMIT);
+  expect(following.source?.posts).toHaveLength(VIEW_POST_LIMIT);
+  expect(notifications.account?.notifications).toHaveLength(VIEW_POST_LIMIT);
+});
+
+test("invalid and unavailable cache preferences fall back without persisting response data", async ({ page }) => {
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    localStorage.setItem("threadline:post-cache-limit", "not-a-limit");
+    const modulePath = "/src/services/desktop/post-cache-settings.ts";
+    const settings: typeof import("../src/services/desktop/post-cache-settings") = await import(modulePath);
+    const fallback = settings.readPostCacheLimit();
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", { configurable: true, get: () => { throw new TypeError("storage blocked"); } });
+    const unavailable = settings.readPostCacheLimit();
+    settings.savePostCacheLimit(50);
+    if (original) Object.defineProperty(window, "localStorage", original);
+    return { fallback, unavailable, keys: Object.keys(localStorage) };
+  });
+  expect(result).toEqual({ fallback: 250, unavailable: 250, keys: ["threadline:post-cache-limit"] });
 });
 
 test("refresh bypasses a cached response", async () => {

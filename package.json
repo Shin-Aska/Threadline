@@ -1,14 +1,14 @@
 {
   "name": "threadline",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false && tsc -p tests/tsconfig.json --pretty false",
     "lint": "eslint . --max-warnings 0",
-    "tauri": "tauri",
+    "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "tauri dev",
     "test:ui": "playwright test"
   },

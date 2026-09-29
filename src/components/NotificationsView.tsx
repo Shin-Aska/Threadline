@@ -2,6 +2,7 @@ import { Bell, Heart, MessageCircle, Repeat2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAdaptiveRailExpansion } from "../hooks/useAdaptiveRailExpansion";
 import { socialApi } from "../services/desktop/social";
+import { boundNotificationPages } from "../services/social/retention";
 import type { WorkspaceState } from "../types";
 import type { NotificationItem, NotificationPage } from "../types/social";
 import { Notice, ProviderIcon } from "./ui";
@@ -73,7 +74,7 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
       try { return { accountId: account.id, page: await socialApi.notifications(account.id, null, { refresh: force }), error: null }; }
       catch (cause) { return { accountId: account.id, page: null, error: cause instanceof Error ? cause.message : String(cause) }; }
     }));
-    setPages(currentPages => Object.fromEntries(results.map(result => { const previous = currentPages[result.accountId]; return [result.accountId, result.page ? { cursor: previous ? previous.cursor : result.page.cursor, notifications: mergeNotifications(previous?.notifications ?? [], result.page.notifications) } : previous ?? { notifications: [], cursor: null }]; })));
+    setPages(currentPages => boundNotificationPages(Object.fromEntries(results.map(result => { const previous = currentPages[result.accountId]; return [result.accountId, result.page ? { cursor: previous ? previous.cursor : result.page.cursor, notifications: mergeNotifications(previous?.notifications ?? [], result.page.notifications) } : previous ?? { notifications: [], cursor: null }]; }))));
     const failures = results.filter(result => result.error).map(result => `${workspace.accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
     failureCount.current = failures.length > 0 ? failureCount.current + 1 : 0;
     setError(failures.length ? failures.join(" · ") : null);
@@ -134,7 +135,7 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
     setPages(current => {
       const next = { ...current };
       for (const result of results) if (result.page) next[result.accountId] = { cursor: result.page.cursor, notifications: mergeNotifications(current[result.accountId]?.notifications ?? [], result.page.notifications) };
-      return next;
+      return boundNotificationPages(next);
     });
     const failures = results.filter(result => result.error).map(result => `${workspace.accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
     setError(failures.length ? failures.join(" · ") : null);

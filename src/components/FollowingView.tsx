@@ -5,6 +5,7 @@ import { useBrowsingScope } from "../hooks/useBrowsingScope";
 import { useSocialFeed } from "../hooks/useSocialFeed";
 import { socialApi } from "../services/desktop/social";
 import { mergeSocialPosts, presentSocialPosts, type SocialFeedItem, type SocialOrder } from "../services/social/presentation";
+import { boundFeedPages } from "../services/social/retention";
 import type { WorkspaceState } from "../types";
 import type { FeedPage, FollowedSource } from "../types/social";
 import { Notice } from "./ui";
@@ -88,7 +89,7 @@ export function FollowingView(props: FollowingProps) {
     const current = ++feedRequest.current; setFeedLoading(true); setFeedError(null);
     const results = await mapLimited(targets, async item => { const key = sourcePageKey(item); try { return { key, page: await socialApi.sourceFeed(item.accountId, item.source, nextPage ? pagesRef.current[key]?.cursor ?? null : null), error: null }; } catch (cause) { return { key, page: null, error: cause instanceof Error ? cause.message : String(cause) }; } });
     if (current !== feedRequest.current) return;
-    setPages(existing => { const updated = { ...existing }; for (const result of results) if (result.page) updated[result.key] = nextPage ? { cursor: result.page.cursor, posts: [...(existing[result.key]?.posts ?? []), ...result.page.posts] } : result.page; return updated; });
+    setPages(existing => { const updated = { ...existing }; for (const result of results) if (result.page) updated[result.key] = nextPage ? { cursor: result.page.cursor, posts: [...(existing[result.key]?.posts ?? []), ...result.page.posts] } : result.page; return boundFeedPages(updated); });
     const failures = results.filter(result => result.error).map(result => result.error); setFeedError(failures.length ? failures.join(" · ") : null); setFeedLoading(false);
   };
   const loadFeedsRef = useRef(loadFeeds); loadFeedsRef.current = loadFeeds;

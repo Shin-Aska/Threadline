@@ -1,9 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Threadline",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "social.threadline.app",
-  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "beforeBundleCommand": "node scripts/prepare-appimage.mjs", "frontendDist": "../dist" },
   "app": { "windows": [{ "title": "Threadline", "width": 1180, "height": 780, "minWidth": 760, "minHeight": 600 }], "security": { "csp": null } },
-  "bundle": { "active": true, "targets": "all", "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"] }
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
+    "linux": {
+      "appimage": { "bundleMediaFramework": true },
+      "deb": { "recommends": ["gstreamer1.0-plugins-good", "gstreamer1.0-pulseaudio"] }
+    }
+  }
 }

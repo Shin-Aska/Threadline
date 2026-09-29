@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socialApi } from "../services/desktop/social";
 import { mergeSocialPosts } from "../services/social/presentation";
+import { boundFeedPages } from "../services/social/retention";
 import type { Account } from "../types";
 import type { FeedPage, FollowedSource, ProfileFeedKind } from "../types/social";
 
@@ -54,7 +55,7 @@ export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSo
     if (request !== revision.current) return;
     const next: Record<string, FeedPage> = {};
     for (const result of settled) switch (result.kind) { case "PAGE": next[result.accountId] = result.page; break; case "ERROR": break; }
-    setPages(next);
+    setPages(boundFeedPages(next));
     setFailures(settled.flatMap(result => result.kind === "ERROR" ? [{ accountId: result.accountId, message: result.error }] : []));
     setLoading(false);
     inFlight.current = false;
@@ -75,7 +76,7 @@ export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSo
     setPages(current => {
       const next = { ...current };
       for (const result of settled) switch (result.kind) { case "PAGE": next[result.accountId] = { cursor: result.page.cursor, posts: [...(current[result.accountId]?.posts ?? []), ...result.page.posts] }; break; case "ERROR": break; }
-      return next;
+      return boundFeedPages(next);
     });
     setFailures(settled.flatMap(result => result.kind === "ERROR" ? [{ accountId: result.accountId, message: result.error }] : []));
     setLoading(false);
