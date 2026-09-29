@@ -1,6 +1,38 @@
 import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 
+test("image viewer keeps close visible and reveals long descriptions", async ({ page }) => {
+  await page.goto("/tests/fixtures/complete-workspace.html");
+  const thumbnail = page.locator(".unified-post .post-media button").first();
+  const alt = await thumbnail.locator("img").getAttribute("alt");
+  await thumbnail.click();
+
+  const viewer = page.getByRole("dialog", { name: "Image viewer" });
+  const close = viewer.getByRole("button", { name: "Close image viewer" });
+  const description = viewer.getByRole("button", { name: "Description", exact: true });
+  const panel = viewer.getByRole("region", { name: "Image description" });
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(close).toBeInViewport();
+    await expect(description).toBeInViewport();
+    await description.click();
+    await expect(panel).toBeVisible();
+    await expect(panel.locator("p")).toHaveText(alt ?? "");
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(viewer).toBeVisible();
+    await expect(description).toBeFocused();
+  }
+
+  await description.click();
+  await panel.getByRole("button", { name: "Hide description" }).click();
+  await expect(panel).toBeHidden();
+  await expect(description).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect(thumbnail).toBeFocused();
+});
+
 test("approved fixture orders loaded posts by discussion count", async ({ page }) => {
   await page.goto("/tests/fixtures/complete-workspace.html");
   await expect(page.getByRole("heading", { name: "Timeline", exact: true })).toBeVisible();

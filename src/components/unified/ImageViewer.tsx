@@ -1,4 +1,4 @@
-import { Maximize2, Minus, Mouse, MousePointer2, Move, Plus, X } from "lucide-react";
+import { Info, Maximize2, Minus, Mouse, MousePointer2, Move, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -20,7 +20,10 @@ const PAN_STEP = 48;
 
 export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
   const titleId = useId();
+  const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const descriptionButtonRef = useRef<HTMLButtonElement>(null);
+  const descriptionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(100);
   const offsetRef = useRef<Point>({ x: 0, y: 0 });
@@ -30,6 +33,12 @@ export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
   const [stageSize, setStageSize] = useState<Size | null>(null);
   const [imageSize, setImageSize] = useState<Size | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
+
+  const hideDescription = () => {
+    setDescriptionOpen(false);
+    descriptionButtonRef.current?.focus();
+  };
 
   const moveTo = useCallback((next: Point) => {
     offsetRef.current = next;
@@ -77,6 +86,7 @@ export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
     setOffset({ x: 0, y: 0 });
     setImageSize(null);
     setLoadFailed(false);
+    setDescriptionOpen(false);
   }, [src]);
 
   useEffect(() => {
@@ -118,11 +128,12 @@ export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onClose();
+      if (descriptionOpen) hideDescription();
+      else onClose();
       return;
     }
     if (event.key === "Tab") {
-      const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])") ?? []);
+      const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])") ?? []).filter(control => !control.closest("[hidden]"));
       const first = controls[0];
       const last = controls[controls.length - 1];
       if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
@@ -134,6 +145,7 @@ export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
       }
       return;
     }
+    if (event.target instanceof Node && descriptionRef.current?.contains(event.target)) return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.code === "NumpadAdd" || event.key === "+" || event.key === "=") {
       event.preventDefault();
@@ -167,7 +179,15 @@ export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
     <div className="image-viewer">
       <div ref={dialogRef} className="image-viewer__dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown}>
         <header className="image-viewer__header">
-          <div className="image-viewer__heading"><h2 id={titleId}>Image viewer</h2>{alt && <p title={alt}>{alt}</p>}</div>
+          <div className="image-viewer__heading"><h2 id={titleId}>Image viewer</h2>{alt && <p aria-hidden="true">{alt}</p>}</div>
+          {alt && <>
+            <button ref={descriptionButtonRef} type="button" className="image-viewer__button image-viewer__description-button" aria-expanded={descriptionOpen} aria-controls={descriptionId} onClick={() => setDescriptionOpen(open => !open)}><Info size={18} aria-hidden="true" /><span>Description</span></button>
+            <section ref={descriptionRef} id={descriptionId} className="image-viewer__description" aria-label="Image description" tabIndex={0} hidden={!descriptionOpen}>
+              <h3>Image description</h3>
+              <p>{alt}</p>
+              <button type="button" className="image-viewer__description-dismiss" onClick={hideDescription}>Hide description</button>
+            </section>
+          </>}
           <button type="button" className="image-viewer__button" aria-label="Close image viewer" onClick={onClose}><X size={20} aria-hidden="true" /></button>
         </header>
         <div ref={stageRef} className="image-viewer__stage" role="group" tabIndex={0} aria-label="Image canvas. Drag to move, use arrow keys to pan, and scroll to zoom." onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={stopDragging} onPointerCancel={stopDragging}>
