@@ -38,6 +38,8 @@ pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, 
         remote_cid: None,
         author: actor(value.account),
         text,
+        content_warning: (!value.spoiler_text.trim().is_empty()).then_some(value.spoiler_text),
+        sensitive: value.sensitive,
         created_at: value.created_at,
         media: value
             .media_attachments
@@ -46,6 +48,7 @@ pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, 
                 url: media.url,
                 alt: media.description.unwrap_or_default(),
                 media_type: media.media_type,
+                thumbnail: None,
             })
             .collect(),
         metrics: PostMetrics {
