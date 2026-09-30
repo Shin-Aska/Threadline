@@ -244,6 +244,30 @@ async fn bluesky_like_resolves_post_cid_before_creating_record() {
 }
 
 #[tokio::test]
+async fn bluesky_unified_timeline_preserves_video_playlist_and_thumbnail() {
+    let session = r#"{"accessJwt":"jwt","did":"did:plc:me","handle":"me.test"}"#;
+    let feed = r#"{"feed":[{"post":{"uri":"at://did:plc:alice/app.bsky.feed.post/3k","cid":"video-cid","author":{"did":"did:plc:alice","handle":"alice.test"},"record":{"text":"A clip","createdAt":"2026-09-20T01:00:00Z"},"embed":{"$type":"app.bsky.embed.video#view","cid":"blob-cid","playlist":"https://video.bsky.test/clip.m3u8","thumbnail":"https://video.bsky.test/clip.jpg","alt":"A small dog playing"}}}],"cursor":"next"}"#;
+    let (url, server) = super::test_http::server(vec![(200, session), (200, feed)]);
+
+    let page = bluesky(url)
+        .timeline("reader", "reader.test", None)
+        .await
+        .expect("unified timeline");
+
+    assert_eq!(
+        page["posts"][0]["media"][0]["url"],
+        "https://video.bsky.test/clip.m3u8"
+    );
+    assert_eq!(page["posts"][0]["media"][0]["type"], "video/hls");
+    assert_eq!(
+        page["posts"][0]["media"][0]["thumbnail"],
+        "https://video.bsky.test/clip.jpg"
+    );
+    assert_eq!(page["cursor"], "next");
+    assert_eq!(server.join().expect("server").len(), 2);
+}
+
+#[tokio::test]
 async fn bluesky_reply_returns_created_post_without_waiting_for_app_view() {
     // Given a parent post and a successful PDS write, with no App View response for the new post.
     let session = r#"{"accessJwt":"jwt","did":"did:plc:me","handle":"me.test"}"#;
