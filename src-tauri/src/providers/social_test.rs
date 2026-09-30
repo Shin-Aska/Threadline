@@ -119,6 +119,87 @@ async fn mastodon_profile_feed_normalizes_viewer_state_and_cursor() {
 }
 
 #[tokio::test]
+async fn mastodon_status_preserves_content_warning_and_sensitive_media() {
+    let body = r#"[{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"<p>Surprise ending</p>","spoiler_text":"Story spoilers","sensitive":true,"account":{"id":"7","acct":"alice"}}]"#;
+    let (url, server) = super::test_http::server(vec![(200, body)]);
+
+    let page = mastodon(url).home_feed(None).await.expect("home feed");
+    let post = serde_json::to_value(&page.posts[0]).expect("serialized post");
+
+    assert_eq!(post["contentWarning"], "Story spoilers");
+    assert_eq!(post["sensitive"], true);
+    server.join().expect("server");
+}
+
+#[tokio::test]
+async fn mastodon_status_text_preserves_html_paragraphs_and_entities() {
+    let body = r#"[{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"<p>First &amp; second</p><p>Third<br>line</p>","account":{"id":"7","acct":"alice"}}]"#;
+    let (url, server) = super::test_http::server(vec![(200, body)]);
+
+    let page = mastodon(url).home_feed(None).await.expect("home feed");
+
+    assert_eq!(page.posts[0].text, "First & second\n\nThird\nline");
+    assert_eq!(server.join().expect("server").len(), 1);
+}
+
+#[tokio::test]
+async fn mastodon_legacy_timeline_preserves_content_warning() {
+    let body = r#"[{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"<p>Surprise ending</p>","spoiler_text":"Story spoilers","sensitive":true,"account":{"id":"7","acct":"alice"}}]"#;
+    let (url, server) = super::test_http::server(vec![(200, body)]);
+
+    let page = mastodon(url)
+        .timeline("reader", "reader", None)
+        .await
+        .expect("legacy home timeline");
+
+    assert_eq!(page["posts"][0]["contentWarning"], "Story spoilers");
+    assert_eq!(page["posts"][0]["sensitive"], true);
+    server.join().expect("server");
+}
+
+#[tokio::test]
+async fn mastodon_replies_keep_raw_page_cursor_when_last_status_is_not_a_reply() {
+    let statuses = r#"[{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"Reply","account":{"id":"7","acct":"alice"},"in_reply_to_id":"9"},{"id":"41","created_at":"2026-09-19T01:00:00Z","content":"Original","account":{"id":"7","acct":"alice"},"in_reply_to_id":null}]"#;
+    let (url, server) = super::test_http::server(vec![(200, statuses)]);
+
+    let page = mastodon(url)
+        .profile_feed("7", ProfileFeedKind::Replies, None)
+        .await
+        .expect("replies page");
+
+    assert_eq!(page.posts.len(), 1);
+    assert_eq!(page.posts[0].remote_id, "42");
+    assert_eq!(page.cursor.as_deref(), Some("41"));
+    server.join().expect("server");
+}
+
+#[tokio::test]
+async fn mastodon_reply_succeeds_from_post_response_without_a_followup_read() {
+    let created = r#"{"id":"43","created_at":"2026-09-20T01:00:00Z","content":"<p>Reply</p>","account":{"id":"7","acct":"me"},"in_reply_to_id":"42"}"#;
+    let (url, server) = super::test_http::server(vec![(200, created)]);
+
+    let result = mastodon(url)
+        .social_action(super::social::SocialAction::Reply {
+            post_id: "42".into(),
+            text: "Reply".into(),
+        })
+        .await
+        .expect("reply must succeed once Mastodon accepted the post");
+
+    assert_eq!(result.record_id.as_deref(), Some("43"));
+    assert_eq!(
+        result
+            .created_post
+            .as_ref()
+            .map(|post| post.remote_id.as_str()),
+        Some("43")
+    );
+    let requests = server.join().expect("server");
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].headers.starts_with("POST /api/v1/statuses "));
+}
+
+#[tokio::test]
 async fn bluesky_profile_feed_sends_cursor_and_normalizes_strong_reference() {
     // Given a session and author-feed response from a real HTTP boundary.
     let session = r#"{"accessJwt":"jwt","did":"did:plc:alice","handle":"alice.test"}"#;
@@ -178,7 +259,7 @@ async fn mastodon_following_uses_people_tags_and_lists_endpoints() {
 
     // Then each native membership is preserved with an actionable source type.
     assert_eq!(page.sources.len(), 3);
-    assert_eq!(page.cursor.as_deref(), Some("8"));
+    assert_eq!(page.cursor, None);
     assert!(matches!(
         page.sources[0].source_type,
         super::social::SourceKind::Person
@@ -197,6 +278,35 @@ async fn mastodon_following_uses_people_tags_and_lists_endpoints() {
         .contains("/api/v1/accounts/7/following?limit=80"));
     assert!(requests[2].headers.contains("/api/v1/followed_tags"));
     assert!(requests[3].headers.contains("/api/v1/lists"));
+}
+
+#[tokio::test]
+async fn mastodon_following_uses_link_cursor_instead_of_account_id() {
+    let own = r#"{"id":"7","acct":"me"}"#;
+    let people = r#"[{"id":"8","acct":"alice"}]"#;
+    let link = "Link: <https://social.test/api/v1/accounts/7/following?limit=80&max_id=123>; rel=\"next\"\r\n";
+    let (url, server) = super::test_http::server_with_headers(vec![
+        (200, own, ""),
+        (200, people, link),
+        (200, "[]", ""),
+        (200, "[]", ""),
+        (200, own, ""),
+        (200, "[]", ""),
+    ]);
+    let provider = mastodon(url);
+
+    let first = provider
+        .followed_sources_page(None)
+        .await
+        .expect("first following page");
+    assert_eq!(first.cursor.as_deref(), Some("123"));
+    provider
+        .followed_sources_page(first.cursor.as_deref())
+        .await
+        .expect("next following page");
+
+    let requests = server.join().expect("server");
+    assert!(requests[5].headers.contains("max_id=123"));
 }
 
 #[tokio::test]
@@ -222,7 +332,7 @@ async fn mastodon_notifications_preserve_remote_inbox_items() {
 async fn bluesky_like_resolves_post_cid_before_creating_record() {
     // Given a trusted post view and a later create-record response.
     let session = r#"{"accessJwt":"jwt","did":"did:plc:me","handle":"me.test"}"#;
-    let posts = r#"{"posts":[{"uri":"at://did:plc:alice/app.bsky.feed.post/3k","cid":"trusted-cid","author":{"did":"did:plc:alice","handle":"alice.test"},"record":{"text":"Hello","createdAt":"2026-09-20T01:00:00Z"}}]}"#;
+    let posts = r#"{"posts":[{"uri":"at://did:plc:alice/app.bsky.feed.post/3k","cid":"trusted-cid","author":{"did":"did:plc:alice","handle":"alice.test"},"record":{"text":"Hello","createdAt":"2026-09-20T01:00:00Z"},"viewer":{"repost":"at://did:plc:me/app.bsky.feed.repost/repost1"}}]}"#;
     let created = r#"{"uri":"at://did:plc:me/app.bsky.feed.like/like1","cid":"like-cid"}"#;
     let (url, server) =
         super::test_http::server(vec![(200, session), (200, posts), (200, created)]);
@@ -237,10 +347,40 @@ async fn bluesky_like_resolves_post_cid_before_creating_record() {
 
     // Then the provider re-fetched and wrote the trusted strong-reference CID.
     assert!(result.viewer.as_ref().is_some_and(|viewer| viewer.liked));
+    assert!(result.viewer.as_ref().is_some_and(|viewer| viewer.reposted));
+    assert_eq!(
+        result
+            .viewer
+            .as_ref()
+            .and_then(|viewer| viewer.repost_uri.as_deref()),
+        Some("at://did:plc:me/app.bsky.feed.repost/repost1")
+    );
     let requests = server.join().expect("server");
     let body: serde_json::Value = serde_json::from_slice(&requests[2].body).expect("record body");
     assert_eq!(body["record"]["subject"]["cid"], "trusted-cid");
     assert_eq!(body["collection"], "app.bsky.feed.like");
+}
+
+#[tokio::test]
+async fn bluesky_home_feed_preserves_video_playlist_and_thumbnail() {
+    let session = r#"{"accessJwt":"jwt","did":"did:plc:me","handle":"me.test"}"#;
+    let feed = r#"{"feed":[{"post":{"uri":"at://did:plc:alice/app.bsky.feed.post/3k","cid":"video-cid","author":{"did":"did:plc:alice","handle":"alice.test"},"record":{"text":"A clip","createdAt":"2026-09-20T01:00:00Z"},"embed":{"$type":"app.bsky.embed.video#view","cid":"blob-cid","playlist":"https://video.bsky.test/clip.m3u8","thumbnail":"https://video.bsky.test/clip.jpg","alt":"A small dog playing"}}}]}"#;
+    let (url, server) = super::test_http::server(vec![(200, session), (200, feed)]);
+
+    let page = bluesky(url).home_feed(None).await.expect("video feed");
+
+    assert_eq!(page.posts[0].media.len(), 1);
+    assert_eq!(
+        page.posts[0].media[0].url,
+        "https://video.bsky.test/clip.m3u8"
+    );
+    assert_eq!(page.posts[0].media[0].media_type, "video/hls");
+    assert_eq!(page.posts[0].media[0].alt, "A small dog playing");
+    assert_eq!(
+        page.posts[0].media[0].thumbnail.as_deref(),
+        Some("https://video.bsky.test/clip.jpg")
+    );
+    assert_eq!(server.join().expect("server").len(), 2);
 }
 
 #[tokio::test]
