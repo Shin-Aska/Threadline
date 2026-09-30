@@ -48,18 +48,16 @@ pub(super) fn post(value: native::PostView) -> SocialPost {
         remote_cid: Some(value.cid),
         author: actor(value.author),
         text: value.record.text,
+        content_warning: None,
+        sensitive: false,
         created_at: value.record.created_at,
-        media: value
-            .embed
-            .and_then(|embed| embed.images)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|image| Media {
-                url: image.fullsize,
-                alt: image.alt,
-                media_type: "image".into(),
-            })
-            .collect(),
+        media: match value.embed {
+            Some(native::EmbedView {
+                media: Some(media), ..
+            }) => media_attachments(*media),
+            Some(embed) => media_attachments(embed),
+            None => Vec::new(),
+        },
         metrics: PostMetrics {
             replies: value.reply_count,
             reposts: value.repost_count,
@@ -75,4 +73,26 @@ pub(super) fn post(value: native::PostView) -> SocialPost {
         reply_root_id,
         reply_root_cid,
     }
+}
+
+fn media_attachments(embed: native::EmbedView) -> Vec<Media> {
+    if let Some(images) = embed.images {
+        return images
+            .into_iter()
+            .map(|image| Media {
+                url: image.fullsize,
+                alt: image.alt,
+                media_type: "image".into(),
+                thumbnail: None,
+            })
+            .collect();
+    }
+    embed.playlist.map_or_else(Vec::new, |url| {
+        vec![Media {
+            url,
+            alt: embed.alt.unwrap_or_default(),
+            media_type: "video/hls".into(),
+            thumbnail: embed.thumbnail,
+        }]
+    })
 }
