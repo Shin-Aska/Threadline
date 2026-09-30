@@ -18,6 +18,7 @@ atrium-identity = "0.1.9"
 atrium-oauth = { version = "0.1.7", default-features = false, features = ["reqwest"] }
 atrium-xrpc = "0.12.4"
 base64 = "0.22"
+dom_query = "0.27"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 jiff = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }

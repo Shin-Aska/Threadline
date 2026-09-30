@@ -143,6 +143,23 @@ async fn mastodon_status_text_preserves_html_paragraphs_and_entities() {
 }
 
 #[tokio::test]
+async fn mastodon_legacy_timeline_preserves_html_paragraphs_and_entities() {
+    let body = r#"[{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"<p>First &amp; second</p><p>Third<br>line</p>","account":{"id":"7","acct":"alice"}}]"#;
+    let (url, server) = super::test_http::server(vec![(200, body)]);
+
+    let timeline = mastodon(url)
+        .timeline("reader", "reader", None)
+        .await
+        .expect("legacy timeline");
+
+    assert_eq!(
+        timeline["posts"][0]["text"],
+        "First & second\n\nThird\nline"
+    );
+    assert_eq!(server.join().expect("server").len(), 1);
+}
+
+#[tokio::test]
 async fn mastodon_legacy_timeline_preserves_content_warning() {
     let body = r#"[{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"<p>Surprise ending</p>","spoiler_text":"Story spoilers","sensitive":true,"account":{"id":"7","acct":"alice"}}]"#;
     let (url, server) = super::test_http::server(vec![(200, body)]);

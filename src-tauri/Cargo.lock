@@ -4401,6 +4401,7 @@ dependencies = [
  "atrium-oauth",
  "atrium-xrpc",
  "base64 0.22.1",
+ "dom_query",
  "jiff",
  "keyring",
  "rand 0.8.8",

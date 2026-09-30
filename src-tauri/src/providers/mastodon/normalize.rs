@@ -23,12 +23,16 @@ pub(super) fn actor(value: native::Account) -> Actor {
     }
 }
 
+pub(super) fn status_text(content: &str) -> String {
+    dom_query::Document::fragment(content)
+        .formatted_text()
+        .to_string()
+}
+
 /// Normalizes a status or its nested reblog, including attachments and viewer state.
 pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, AppError> {
     let value = value.reblog.as_deref().cloned().unwrap_or(value);
-    let cleaner =
-        regex::Regex::new("<[^>]+>").map_err(|error| AppError::Provider(error.to_string()))?;
-    let text = cleaner.replace_all(&value.content, "").to_string();
+    let text = status_text(&value.content);
     let reply_parent_id = value.in_reply_to_id.clone();
     Ok(SocialPost {
         canonical_key: format!("MASTODON:{base_url}:{}", value.id),
