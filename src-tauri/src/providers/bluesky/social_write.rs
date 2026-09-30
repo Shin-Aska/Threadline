@@ -25,13 +25,8 @@ impl BlueskyProvider {
                 .await;
         }
         let session = self.session().await?;
-        self.request(
-            self.client
-                .post(format!(
-                    "{}/xrpc/com.atproto.repo.createRecord",
-                    self.service_url.trim_end_matches('/')
-                ))
-                .bearer_auth(&session.access_jwt),
+        self.post_json(
+            "com.atproto.repo.createRecord",
             serde_json::json!({"repo": session.did, "collection": collection, "record": record}),
         )
         .await
