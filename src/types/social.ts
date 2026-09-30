@@ -26,8 +26,10 @@ export interface SocialPost {
   readonly remoteUrl: string;
   readonly author: ProviderActor;
   readonly text: string;
+  readonly contentWarning: string | null;
+  readonly sensitive: boolean;
   readonly createdAt: string;
-  readonly media: readonly { readonly url: string; readonly alt: string; readonly mediaType: string }[];
+  readonly media: readonly { readonly url: string; readonly alt: string; readonly mediaType: string; readonly thumbnail?: string | null }[];
   readonly metrics: { readonly replies: number | null; readonly reposts: number | null; readonly likes: number | null };
   readonly viewer: ViewerState;
   readonly replyParentId: string | null;
