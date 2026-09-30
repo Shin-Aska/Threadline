@@ -4,15 +4,38 @@
 use super::*;
 use crate::{
     models::PreparedPost,
-    providers::{bluesky::BlueskyProvider, test_http::server, SocialProvider},
+    providers::{
+        bluesky::{AppPasswordSessionState, BlueskyProvider, SessionResponse},
+        test_http::server,
+        SocialProvider,
+    },
 };
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 fn client() -> reqwest::Client {
     reqwest::Client::builder()
         .no_proxy()
         .build()
         .expect("client")
+}
+
+fn provider(service_url: String) -> BlueskyProvider {
+    BlueskyProvider {
+        app_password_session: tokio::sync::Mutex::new(AppPasswordSessionState::Active {
+            created: Instant::now(),
+            session: SessionResponse {
+                access_jwt: "session-token".into(),
+                did: "did:plc:test".into(),
+                handle: "test.invalid".into(),
+            },
+        }),
+        capabilities: crate::accounts::mock_accounts()[0].capabilities.clone(),
+        client: client(),
+        service_url,
+        identifier: "test.invalid".into(),
+        app_password: "fixture-only".into(),
+        oauth: None,
+    }
 }
 
 fn video() -> PreparedMedia {
@@ -44,16 +67,9 @@ async fn uploads_after_live_limit_check_and_waits_for_completed_blob() {
     ]);
 
     // When one MP4 is uploaded through the video service.
-    let blob = upload_video(
-        &client(),
-        &url,
-        &url,
-        "session-token",
-        "did:plc:test",
-        &video(),
-    )
-    .await
-    .expect("video upload");
+    let blob = upload_video(&provider(url.clone()), &url, "did:plc:test", &video())
+        .await
+        .expect("video upload");
 
     // Then the processed blob is returned and the post record can safely use it.
     assert_eq!(blob["ref"]["$link"], "video-cid");
@@ -81,20 +97,46 @@ async fn denied_upload_limit_stops_before_video_bytes_are_sent() {
     ]);
 
     // When video upload is requested.
-    let error = upload_video(
-        &client(),
-        &url,
-        &url,
-        "session-token",
-        "did:plc:test",
-        &video(),
-    )
-    .await
-    .expect_err("limit denial");
+    let error = upload_video(&provider(url.clone()), &url, "did:plc:test", &video())
+        .await
+        .expect_err("limit denial");
 
     // Then the precise service reason is surfaced without uploading or publishing.
     assert!(error.to_string().contains("Email verification required"));
     assert_eq!(task.join().expect("server").len(), 2);
+}
+
+#[tokio::test]
+async fn expired_session_renews_before_video_service_authorization() {
+    let (url, task) = server(vec![
+        (401, r#"{"error":"ExpiredToken"}"#),
+        (
+            200,
+            r#"{"accessJwt":"fresh-token","did":"did:plc:test","handle":"test.invalid"}"#,
+        ),
+        (200, r#"{"token":"limits-token"}"#),
+        (
+            200,
+            r#"{"canUpload":false,"message":"Video allowance exhausted"}"#,
+        ),
+    ]);
+    let provider = provider(url.clone());
+
+    let error = upload_video(&provider, &url, "did:plc:test", &video())
+        .await
+        .expect_err("video limit denial");
+
+    assert!(error.to_string().contains("Video allowance exhausted"));
+    let requests = task.join().expect("server");
+    assert_eq!(requests.len(), 4);
+    assert!(requests[0]
+        .headers
+        .to_lowercase()
+        .contains("authorization: bearer session-token"));
+    assert!(requests[2]
+        .headers
+        .to_lowercase()
+        .contains("authorization: bearer fresh-token"));
 }
 
 #[tokio::test]
