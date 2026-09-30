@@ -37,6 +37,10 @@ pub(super) struct Status {
     pub created_at: String,
     #[serde(default)]
     pub content: String,
+    #[serde(default)]
+    pub spoiler_text: String,
+    #[serde(default)]
+    pub sensitive: bool,
     pub account: Account,
     #[serde(default)]
     pub media_attachments: Vec<Attachment>,
