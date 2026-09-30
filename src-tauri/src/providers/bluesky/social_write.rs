@@ -97,15 +97,29 @@ impl BlueskyProvider {
         collection: &str,
     ) -> Result<SocialActionResult, AppError> {
         let post = self.resolve_post(post_id).await?;
+        let native::PostViewer { like, repost } = post.viewer.unwrap_or(native::PostViewer {
+            like: None,
+            repost: None,
+        });
         let record = self.create_social_record(collection, serde_json::json!({"$type": collection, "subject": {"uri": post.uri, "cid": post.cid}, "createdAt": crate::providers::now_iso8601()})).await?;
         let liked = collection == "app.bsky.feed.like";
+        let like_uri = if liked {
+            Some(record.uri.clone())
+        } else {
+            like
+        };
+        let repost_uri = if liked {
+            repost
+        } else {
+            Some(record.uri.clone())
+        };
         Ok(SocialActionResult {
             target_id: post_id.to_owned(),
             viewer: Some(ViewerState {
-                liked,
-                reposted: !liked,
-                like_uri: liked.then(|| record.uri.clone()),
-                repost_uri: (!liked).then(|| record.uri.clone()),
+                liked: like_uri.is_some(),
+                reposted: repost_uri.is_some(),
+                like_uri,
+                repost_uri,
             }),
             followed: None,
             record_id: Some(record.uri),
@@ -223,6 +237,8 @@ impl BlueskyProvider {
                 avatar_url: None,
             },
             text,
+            content_warning: None,
+            sensitive: false,
             created_at,
             media: Vec::new(),
             metrics: PostMetrics {
