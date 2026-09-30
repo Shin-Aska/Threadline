@@ -1,6 +1,7 @@
 //! Uploads MP4 video through the Bluesky video service after checking live account limits.
 
 mod auth;
+use super::BlueskyProvider;
 use crate::{error::AppError, models::PreparedMedia};
 use auth::ServiceAuthSource;
 use serde::Deserialize;
@@ -58,22 +59,17 @@ pub(super) fn service_url(pds_url: &str) -> &str {
 
 /// Uploads an MP4 using service tokens obtained from an app-password session.
 pub(super) async fn upload_video(
-    client: &reqwest::Client,
-    pds_url: &str,
+    provider: &BlueskyProvider,
     video_service_url: &str,
-    access_jwt: &str,
     did: &str,
     video: &PreparedMedia,
 ) -> Result<serde_json::Value, AppError> {
     upload_video_with_auth(
-        client,
+        &provider.client,
         video_service_url,
         did,
         video,
-        ServiceAuthSource::Bearer {
-            pds_url,
-            access_jwt,
-        },
+        ServiceAuthSource::Bearer(provider),
     )
     .await
 }
@@ -106,7 +102,7 @@ async fn upload_video_with_auth(
     if video.mime_type != VIDEO_MIME {
         return Err(AppError::Validation("Bluesky video must be MP4".into()));
     }
-    let limits_token = auth.token(client, "app.bsky.video.getUploadLimits").await?;
+    let limits_token = auth.token("app.bsky.video.getUploadLimits").await?;
     let limits: UploadLimits = response_json(
         client
             .get(format!(
@@ -120,7 +116,7 @@ async fn upload_video_with_auth(
     .await?;
     validate_limits(&limits, video.data.len())?;
 
-    let upload_token = auth.token(client, "app.bsky.video.uploadVideo").await?;
+    let upload_token = auth.token("app.bsky.video.uploadVideo").await?;
     let response: JobResponse = response_json(
         client
             .post(format!(
