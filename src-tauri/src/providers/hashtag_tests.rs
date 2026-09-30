@@ -1,3 +1,5 @@
+//! Checks native hashtag search, trend fallback, session renewal, and Bluesky facet publication.
+
 use super::{
     bluesky::BlueskyProvider, mastodon::MastodonProvider, test_http::server, SocialProvider,
 };

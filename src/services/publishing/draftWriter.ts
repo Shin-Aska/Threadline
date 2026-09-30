@@ -5,6 +5,7 @@ import { publishingApi } from "../desktop/publishing";
 let current: DraftRecord | null = null;
 let serial: Promise<void> = Promise.resolve();
 
+/** Serializes autosaves and carries forward the latest optimistic revision. */
 export const draftWriter = {
   seed(draft: DraftRecord | null): void { current = draft; },
   save(post: CanonicalPost, hint: DraftRecord | null): Promise<DraftRecord> {

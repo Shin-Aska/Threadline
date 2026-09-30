@@ -53,6 +53,7 @@ async function readMedia(file: File): Promise<MediaAttachment> {
     reader.readAsDataURL(file);
   });
 }
+/** Selects, previews, and edits the accessibility text of attached media. */
 export function ImageAttachments({ media, accounts, disabled, onChange, onReading, counter }: ImageAttachmentsProps) {
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);

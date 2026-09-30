@@ -1,8 +1,11 @@
+//! Uploads Mastodon media and waits until each attachment has a usable URL.
+
 use super::MastodonProvider;
 use crate::{error::AppError, models::PreparedMedia};
 use serde::Deserialize;
 use std::time::Duration;
 
+/// Media ID and URL returned by upload or processing status endpoints.
 #[derive(Deserialize)]
 struct UploadedMedia {
     id: String,
@@ -23,6 +26,7 @@ async fn read_media(response: reqwest::Response) -> Result<UploadedMedia, AppErr
 }
 
 impl MastodonProvider {
+    /// Uploads attachments sequentially and returns IDs only after each has finished processing.
     pub(super) async fn upload_media(
         &self,
         media_items: &[PreparedMedia],

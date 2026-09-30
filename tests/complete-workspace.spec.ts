@@ -1,6 +1,38 @@
 import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 
+test("image viewer keeps close visible and reveals long descriptions", async ({ page }) => {
+  await page.goto("/tests/fixtures/complete-workspace.html");
+  const thumbnail = page.locator(".unified-post .post-media button").first();
+  const alt = await thumbnail.locator("img").getAttribute("alt");
+  await thumbnail.click();
+
+  const viewer = page.getByRole("dialog", { name: "Image viewer" });
+  const close = viewer.getByRole("button", { name: "Close image viewer" });
+  const description = viewer.getByRole("button", { name: "Description", exact: true });
+  const panel = viewer.getByRole("region", { name: "Image description" });
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(close).toBeInViewport();
+    await expect(description).toBeInViewport();
+    await description.click();
+    await expect(panel).toBeVisible();
+    await expect(panel.locator("p")).toHaveText(alt ?? "");
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(viewer).toBeVisible();
+    await expect(description).toBeFocused();
+  }
+
+  await description.click();
+  await panel.getByRole("button", { name: "Hide description" }).click();
+  await expect(panel).toBeHidden();
+  await expect(description).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect(thumbnail).toBeFocused();
+});
+
 test("approved fixture orders loaded posts by discussion count", async ({ page }) => {
   await page.goto("/tests/fixtures/complete-workspace.html");
   await expect(page.getByRole("heading", { name: "Timeline", exact: true })).toBeVisible();
@@ -53,6 +85,8 @@ test("Notifications deduplicate paginated activity and preserve read state", asy
   await page.goto("/tests/fixtures/complete-workspace.html");
   await page.getByRole("button", { name: "Notifications", exact: true }).click();
   await expect(page.locator(".notification-row")).toHaveCount(3);
+  await expect(page.locator(".notification-row").filter({ hasText: "Clara Chen" })).toContainText("Content warning: Story spoilers");
+  await expect(page.locator(".notification-row").filter({ hasText: "Clara Chen" })).not.toContainText("Finally got this handheld working again");
   await page.getByRole("button", { name: "Load more" }).click();
   await expect(page.locator(".notification-row")).toHaveCount(5);
   await expect(page.getByText(/Updated Jules Park/)).toBeVisible();
@@ -104,11 +138,110 @@ test("social actions use the chosen account and roll back provider failure", asy
   await page.goto("/");
   const card = page.locator(".unified-post");
   await card.getByLabel("Act as").selectOption("reader-two");
-  const like = card.getByRole("button").filter({ hasText: "3" }).last();
+  const like = card.locator("footer button").nth(2);
   await like.click();
   await expect(card.getByRole("alert")).toHaveText("Provider rejected the action");
   await expect(like).toHaveAttribute("aria-pressed", "false");
   expect(await page.evaluate(() => sessionStorage.getItem("acting-account"))).toBe("reader-two");
   await like.click();
   await expect(like).toHaveAttribute("aria-pressed", "true");
+  await expect(like).toContainText("4");
+});
+
+test("Mastodon content warnings hide post text and sensitive media until revealed", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    const capabilities = { maxTextLength: 500, maxMediaAttachments: 4, supportedMediaTypes: ["image/png"], countingPolicy: "GRAPHEME", reservedUrlLength: 23, supportsPolls: true, supportsContentWarnings: true };
+    const account = { id: "reader", provider: "MASTODON", handle: "reader@social.test", displayName: "Reader", instanceUrl: "https://social.test", did: null, capabilities };
+    const post = { canonicalKey: "MASTODON:42", provider: "MASTODON", remoteId: "42", remoteCid: null, remoteUrl: "https://social.test/@alice/42", author: { id: "alice", displayName: "Alice", handle: "alice", avatarUrl: null }, text: "The hidden ending", contentWarning: "Story spoilers", sensitive: true, createdAt: "2026-09-20T08:00:00Z", media: [{ url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E", alt: "Ending illustration", mediaType: "image" }], metrics: { replies: 0, reposts: 0, likes: 0 }, viewer: { liked: false, reposted: false, likeUri: null, repostUri: null }, replyParentId: null, replyRootId: null, replyRootCid: null };
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: { invoke: async (command: string) => {
+      if (command === "get_workspace") return { accounts: [account], connectedAccountIds: [account.id], mode: "LIVE" };
+      if (command === "get_home_feed") return { posts: [post], cursor: null };
+      throw new Error(`Unexpected command ${command}`);
+    } } });
+  });
+  await page.goto("/");
+  const card = page.locator(".unified-post").first();
+  await expect(card.getByText("Story spoilers")).toBeVisible();
+  await expect(card.getByText("The hidden ending")).toHaveCount(0);
+  await expect(card.locator(".post-media img")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("warning-collapsed-desktop.png") });
+  const toggle = card.getByRole("button", { name: "Show post" });
+  await toggle.click();
+  await expect(card.getByText("The hidden ending")).toBeVisible();
+  await expect(card.locator(".post-media img")).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("warning-expanded-desktop.png") });
+  await expect(card.getByRole("button", { name: "Hide post" })).toHaveAttribute("aria-expanded", "true");
+  await card.getByRole("button", { name: "Hide post" }).click();
+  await expect(card.getByText("The hidden ending")).toHaveCount(0);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(card.getByRole("button", { name: "Show post" })).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("warning-collapsed-phone.png") });
+});
+
+test("Bluesky video posts expose an HLS player with its thumbnail and alt text", async ({ page }, testInfo) => {
+  let releasePlaylist: () => void = () => {};
+  const playlistGate = new Promise<void>(resolve => { releasePlaylist = resolve; });
+  await page.route("https://video.bsky.test/clip.m3u8", async route => {
+    await playlistGate;
+    await route.fulfill({
+      contentType: "application/vnd.apple.mpegurl",
+      headers: { "access-control-allow-origin": "*" },
+      body: "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-ENDLIST\n",
+    });
+  });
+  await page.addInitScript(() => {
+    const capabilities = { maxTextLength: 300, maxMediaAttachments: 4, supportedMediaTypes: ["image/png", "video/mp4"], countingPolicy: "GRAPHEME", reservedUrlLength: 23, supportsPolls: false, supportsContentWarnings: false };
+    const account = { id: "reader", provider: "BLUESKY", handle: "reader.bsky.social", displayName: "Reader", instanceUrl: "https://bsky.social", did: "did:plc:reader", capabilities };
+    const thumbnail = "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360'><rect width='640' height='360' fill='#264779'/><circle cx='320' cy='180' r='75' fill='#87a9e9'/></svg>");
+    const post = { canonicalKey: "BLUESKY:video", provider: "BLUESKY", remoteId: "at://did:plc:alice/app.bsky.feed.post/video", remoteCid: "video-cid", remoteUrl: "https://bsky.app/profile/alice.bsky.social/post/video", author: { id: "did:plc:alice", displayName: "Alice", handle: "alice.bsky.social", avatarUrl: null }, text: "A clip", contentWarning: null, sensitive: false, createdAt: "2026-09-20T08:00:00Z", media: [{ url: "https://video.bsky.test/clip.m3u8", alt: "A small dog playing", mediaType: "video/hls", thumbnail }], metrics: { replies: 0, reposts: 0, likes: 0 }, viewer: { liked: false, reposted: false, likeUri: null, repostUri: null }, replyParentId: null, replyRootId: null, replyRootCid: null };
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: { invoke: async (command: string) => {
+      if (command === "get_workspace") return { accounts: [account], connectedAccountIds: [account.id], mode: "LIVE" };
+      if (command === "get_home_feed") return { posts: [post], cursor: null };
+      throw new Error(`Unexpected command ${command}`);
+    } } });
+  });
+  const playlist = page.waitForRequest("https://video.bsky.test/clip.m3u8");
+  await page.goto("/");
+  const card = page.locator(".unified-post").first();
+  const video = card.locator("video[aria-label=\"A small dog playing\"]");
+  await expect(video).toBeVisible();
+  await expect(video).toHaveAttribute("poster", /data:image\/svg\+xml/);
+  await page.screenshot({ path: testInfo.outputPath("bluesky-video-desktop.png") });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(video).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("bluesky-video-phone.png") });
+  releasePlaylist();
+  await playlist;
+  const fallback = card.getByRole("link", { name: "Video playback unavailable. Open original post" });
+  await expect(fallback).toBeVisible();
+  await fallback.click();
+  await expect(page.getByRole("dialog", { name: "Open an external link?" })).toContainText("bsky.app");
+});
+
+test("successful heart updates the visible count without refreshing", async ({ page }) => {
+  await page.goto("/tests/fixtures/complete-workspace.html");
+  const card = page.locator(".unified-page:visible .unified-post").first();
+  const heart = card.locator("footer button").nth(2);
+  await expect(heart).toContainText("24");
+  await heart.click();
+  await expect(heart).toHaveAttribute("aria-pressed", "true");
+  await expect(heart).toContainText("25");
+  await page.getByPlaceholder("Search loaded posts, people, or topics…").fill("Marco");
+  await expect(heart).toHaveAttribute("aria-pressed", "true");
+  await heart.click();
+  await expect(heart).toHaveAttribute("aria-pressed", "false");
+  await expect(heart).toContainText("24");
+});
+
+test("successful reply updates the conversation and timeline without refreshing", async ({ page }) => {
+  await page.goto("/tests/fixtures/complete-workspace.html");
+  const timelinePost = page.locator(".unified-page:visible .unified-post").first();
+  await timelinePost.locator("time button").click();
+  const conversation = page.locator(".unified-page:visible");
+  await conversation.locator("#thread-reply").fill("A new reply from this account.");
+  await conversation.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(conversation.getByText("A new reply from this account.")).toBeVisible();
+  await expect(conversation.locator(".unified-post").first().locator("footer button").first()).toContainText("9");
+  await conversation.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(timelinePost.locator("footer button").first()).toContainText("9");
 });

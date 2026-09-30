@@ -1,3 +1,6 @@
+//! Checks app-password session reuse, failure caching, expiry, and invalidation
+//! across concurrent reads and writes.
+
 use super::{bluesky::BlueskyProvider, SocialProvider};
 use std::{
     io::{BufRead, BufReader, Write},
@@ -18,6 +21,16 @@ fn bluesky(service_url: String) -> BlueskyProvider {
         app_password: "secret".into(),
         oauth: None,
     }
+}
+
+#[test]
+fn app_password_service_rejects_plain_http_and_embedded_credentials() {
+    assert!(super::bluesky::validate_app_password_service_url("http://pds.example").is_err());
+    assert!(
+        super::bluesky::validate_app_password_service_url("https://user:secret@pds.example")
+            .is_err()
+    );
+    assert!(super::bluesky::validate_app_password_service_url("https://pds.example").is_ok());
 }
 
 fn read_request(socket: TcpStream) -> (BufReader<TcpStream>, String) {
@@ -189,6 +202,75 @@ async fn unauthorized_write_invalidates_session_without_retrying_write() {
         .headers
         .to_lowercase()
         .contains("authorization: bearer new-jwt"));
+}
+
+#[tokio::test]
+async fn unauthorized_publish_clears_cached_app_password_session() {
+    let session = r#"{"accessJwt":"old-jwt","did":"did:plc:alice","handle":"alice.test"}"#;
+    let (url, server) =
+        super::test_http::server(vec![(200, session), (401, r#"{"error":"ExpiredToken"}"#)]);
+    let provider = bluesky(url);
+
+    assert!(provider
+        .publish(crate::models::PreparedPost {
+            text: "Hello".into(),
+            media: Vec::new(),
+        })
+        .await
+        .is_err());
+
+    assert!(matches!(
+        *provider.app_password_session.lock().await,
+        super::bluesky::AppPasswordSessionState::Empty
+    ));
+    assert_eq!(server.join().expect("server").len(), 2);
+}
+
+#[tokio::test]
+async fn unauthorized_image_upload_clears_cached_app_password_session() {
+    let session = r#"{"accessJwt":"old-jwt","did":"did:plc:alice","handle":"alice.test"}"#;
+    let (url, server) =
+        super::test_http::server(vec![(200, session), (401, r#"{"error":"ExpiredToken"}"#)]);
+    let provider = bluesky(url);
+
+    assert!(provider
+        .publish(crate::models::PreparedPost {
+            text: "Hello".into(),
+            media: vec![crate::models::PreparedMedia {
+                mime_type: "image/jpeg".into(),
+                data: std::sync::Arc::from(b"image bytes".as_slice()),
+                alt_text: "Image".into(),
+            }],
+        })
+        .await
+        .is_err());
+
+    assert!(matches!(
+        *provider.app_password_session.lock().await,
+        super::bluesky::AppPasswordSessionState::Empty
+    ));
+    assert_eq!(server.join().expect("server").len(), 2);
+}
+
+#[tokio::test]
+async fn unauthorized_follow_clears_cached_app_password_session() {
+    let session = r#"{"accessJwt":"old-jwt","did":"did:plc:alice","handle":"alice.test"}"#;
+    let (url, server) =
+        super::test_http::server(vec![(200, session), (401, r#"{"error":"ExpiredToken"}"#)]);
+    let provider = bluesky(url);
+
+    assert!(provider
+        .social_action(super::social::SocialAction::Follow {
+            profile_id: "did:plc:other".into(),
+        })
+        .await
+        .is_err());
+
+    assert!(matches!(
+        *provider.app_password_session.lock().await,
+        super::bluesky::AppPasswordSessionState::Empty
+    ));
+    assert_eq!(server.join().expect("server").len(), 2);
 }
 
 #[tokio::test]

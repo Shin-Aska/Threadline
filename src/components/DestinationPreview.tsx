@@ -9,6 +9,7 @@ interface PreviewProps {
   readonly media: readonly MediaAttachment[];
   readonly native: boolean;
 }
+/** Shows how the current post and attachments fit each selected destination. */
 export function DestinationPreview({ accounts, preview, text, media, native }: PreviewProps) {
   return <aside className="preview-column"><section className="panel preview-panel" aria-labelledby="preview-heading"><header className="preview-heading"><h2 id="preview-heading">Live preview</h2><p>Here’s how your post will look on each network.</p></header>
     {!accounts.length && <div className="empty-state"><Eye size={24} /><h3>Select a destination</h3><p>Use Add more to choose an account for this post.</p></div>}

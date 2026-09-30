@@ -1,3 +1,8 @@
+//! Persistence scenarios for drafts, publication claims, and schedules.
+//!
+//! These tests exercise file-backed reopening, revision conflicts, one-winner
+//! claims, uncertain recovery, and schedule snapshots after draft changes.
+
 use super::Database;
 use crate::models::{
     CanonicalPost, CreateScheduleInput, MediaAttachment, PublicationOutcome, PublishingPolicy,

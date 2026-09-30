@@ -15,6 +15,10 @@ use crate::{
 use rusqlite::{params, OptionalExtension};
 
 impl Database {
+    /// Creates or returns the idempotent publication record for the current draft.
+    ///
+    /// Repeated calls for the same draft revision reuse the existing batch,
+    /// preventing a duplicate dispatch record for that snapshot.
     pub fn begin_publication(&self, draft_id: &str) -> Result<PublicationRecord, AppError> {
         let draft = self.get_draft(draft_id)?;
         self.begin_publication_snapshot(
@@ -25,6 +29,7 @@ impl Database {
         )
     }
 
+    /// Creates or returns the publication record for a queued schedule snapshot.
     pub fn begin_scheduled_publication(
         &self,
         schedule: &ScheduledPublication,
@@ -75,6 +80,10 @@ impl Database {
         self.get_publication(&batch_id)
     }
 
+    /// Claims a destination once, moving it from `Pending` to `InFlight`.
+    ///
+    /// Returns `false` when the destination is absent or another dispatcher
+    /// already claimed it.
     pub fn claim_destination(&self, batch_id: &str, account_id: &str) -> Result<bool, AppError> {
         let changed = self.connection()?.execute(
             "UPDATE publication_destinations SET status='IN_FLIGHT',error=NULL
@@ -84,6 +93,10 @@ impl Database {
         Ok(changed == 1)
     }
 
+    /// Persists a terminal destination result and closes the batch when all work ends.
+    ///
+    /// Only a destination currently in `InFlight` can be finished. Pending and
+    /// in-flight values are rejected because they are not final outcomes.
     pub fn finish_destination(
         &self,
         batch_id: &str,
@@ -133,6 +146,10 @@ impl Database {
         Ok(())
     }
 
+    /// Claims one zero-based thread segment for a destination already in flight.
+    ///
+    /// A segment can be inserted only once, which prevents duplicate provider
+    /// calls when dispatch is retried or raced.
     pub fn begin_segment(
         &self,
         batch_id: &str,
@@ -149,6 +166,10 @@ impl Database {
         Ok(changed == 1)
     }
 
+    /// Persists a terminal result for a previously claimed thread segment.
+    ///
+    /// A confirmed remote ID is also appended to the destination's ordered ID
+    /// list. Non-terminal outcomes and unclaimed segments return an error.
     pub fn finish_segment(
         &self,
         batch_id: &str,
@@ -205,6 +226,9 @@ impl Database {
         Ok(())
     }
 
+    /// Loads one publication batch with destination and segment results.
+    ///
+    /// Returns a validation error when the batch ID is unknown.
     pub fn get_publication(&self, id: &str) -> Result<PublicationRecord, AppError> {
         let connection = self.connection()?;
         let header: Option<(String, i64, String, i64, Option<i64>)> = connection
@@ -256,6 +280,7 @@ impl Database {
         })
     }
 
+    /// Lists publication batches newest first, including incomplete batches.
     pub fn list_publications(&self) -> Result<Vec<PublicationRecord>, AppError> {
         let ids = {
             let connection = self.connection()?;
@@ -269,6 +294,9 @@ impl Database {
         ids.iter().map(|id| self.get_publication(id)).collect()
     }
 
+    /// Deletes a publication record and its dependent ledger rows.
+    ///
+    /// Returns a validation error when no batch has the requested ID.
     pub fn delete_publication(&self, id: &str) -> Result<(), AppError> {
         let changed = self
             .connection()?
@@ -279,6 +307,11 @@ impl Database {
         Ok(())
     }
 
+    /// Converts unfinished in-flight destinations and segments to `Uncertain`.
+    ///
+    /// A lost provider response cannot be retried safely because the remote
+    /// service may already have accepted the post. Batches with no remaining
+    /// pending work are marked complete in the same transaction.
     pub fn recover_interrupted_publications(&self) -> Result<(), AppError> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;

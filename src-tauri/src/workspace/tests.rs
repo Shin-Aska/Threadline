@@ -1,3 +1,4 @@
+//! Workspace scenarios cover credential restoration, sample cleanup, and disconnected snapshots.
 use super::*;
 use crate::accounts::mock_accounts;
 use crate::config::provider_from_credential;
@@ -7,6 +8,7 @@ use std::{
 };
 
 #[derive(Default)]
+/// Credential store used to control restoration independently of the OS keychain.
 struct MemoryCredentials(RwLock<HashMap<String, String>>);
 
 impl CredentialStore for MemoryCredentials {

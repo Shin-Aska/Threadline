@@ -1,3 +1,6 @@
+//! Browsing and social action commands for connected accounts.
+//!
+//! Each command resolves an account's active provider before delegating the request.
 use crate::{error::AppError, AppState};
 use tauri::State;
 fn provider_and_account(
@@ -28,6 +31,7 @@ fn provider_and_account(
     Ok((provider, account))
 }
 #[tauri::command]
+/// Returns the provider's legacy timeline payload for an account.
 pub async fn get_timeline(
     account_id: String,
     cursor: Option<String>,
@@ -37,6 +41,7 @@ pub async fn get_timeline(
     p.timeline(&a.id, &a.handle, cursor.as_deref()).await
 }
 #[tauri::command]
+/// Returns the provider's legacy discovery payload for an account.
 pub async fn get_discovery(
     account_id: String,
     state: State<'_, AppState>,
@@ -45,6 +50,7 @@ pub async fn get_discovery(
     p.discovery(&a.id, &a.handle).await
 }
 #[tauri::command]
+/// Returns the provider's legacy following-source payload.
 pub async fn get_following_sources(
     account_id: String,
     state: State<'_, AppState>,
@@ -54,6 +60,7 @@ pub async fn get_following_sources(
 }
 
 #[tauri::command]
+/// Returns a cursor-paginated home feed for the connected account.
 pub async fn get_home_feed(
     account_id: String,
     cursor: Option<String>,
@@ -64,6 +71,7 @@ pub async fn get_home_feed(
 }
 
 #[tauri::command]
+/// Returns the connected account's posts selected by feed kind.
 pub async fn get_own_feed(
     account_id: String,
     kind: crate::providers::social::ProfileFeedKind,
@@ -75,6 +83,7 @@ pub async fn get_own_feed(
 }
 
 #[tauri::command]
+/// Returns profile details for the connected account.
 pub async fn get_own_profile(
     account_id: String,
     state: State<'_, AppState>,
@@ -84,6 +93,7 @@ pub async fn get_own_profile(
 }
 
 #[tauri::command]
+/// Returns profile details for a provider-specific profile ID.
 pub async fn get_profile(
     account_id: String,
     profile_id: String,
@@ -94,6 +104,7 @@ pub async fn get_profile(
 }
 
 #[tauri::command]
+/// Returns a cursor-paginated feed for a provider-specific profile ID.
 pub async fn get_profile_feed(
     account_id: String,
     profile_id: String,
@@ -108,6 +119,7 @@ pub async fn get_profile_feed(
 }
 
 #[tauri::command]
+/// Returns the conversation containing a provider-specific post ID.
 pub async fn get_thread(
     account_id: String,
     post_id: String,
@@ -118,6 +130,7 @@ pub async fn get_thread(
 }
 
 #[tauri::command]
+/// Returns a tag feed, accepting a tag with or without its leading hash sign.
 pub async fn get_tag_feed(
     account_id: String,
     tag: String,
@@ -131,6 +144,7 @@ pub async fn get_tag_feed(
 }
 
 #[tauri::command]
+/// Returns a cursor-paginated list of the account's followed sources.
 pub async fn get_followed_sources(
     account_id: String,
     cursor: Option<String>,
@@ -141,6 +155,7 @@ pub async fn get_followed_sources(
 }
 
 #[tauri::command]
+/// Returns a followed source's feed when it belongs to the account's provider.
 pub async fn get_source_feed(
     account_id: String,
     source: crate::providers::social::FollowedSource,
@@ -157,6 +172,7 @@ pub async fn get_source_feed(
 }
 
 #[tauri::command]
+/// Returns notifications, applying locally stored read state for Mastodon.
 pub async fn get_notifications(
     account_id: String,
     cursor: Option<String>,
@@ -174,6 +190,7 @@ pub async fn get_notifications(
 }
 
 #[tauri::command]
+/// Marks Mastodon notifications locally or delegates the read action to Bluesky.
 pub async fn mark_notifications_read(
     account_id: String,
     notification_ids: Vec<String>,
@@ -191,6 +208,7 @@ pub async fn mark_notifications_read(
 }
 
 #[tauri::command]
+/// Performs a provider social action for the connected account.
 pub async fn perform_social_action(
     account_id: String,
     action: crate::providers::social::SocialAction,

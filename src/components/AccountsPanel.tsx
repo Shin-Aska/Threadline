@@ -15,6 +15,7 @@ interface AccountsProps {
   readonly onRemoved: (id: string) => Promise<void>;
 }
 
+/** Lists saved accounts and exposes provider connect, reconnect, and removal actions. */
 export function AccountsPanel({ workspace, refreshing, onConnected, onRemoved, setup = false }: AccountsProps) {
   const { accounts, mode, connectedAccountIds } = workspace;
   const native = mode !== "BROWSER";

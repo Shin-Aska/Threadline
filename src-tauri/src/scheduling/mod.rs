@@ -9,6 +9,7 @@ use crate::{
     AppState,
 };
 
+/// Publishes a claimed schedule and records its completed or failed state.
 pub async fn dispatch_schedule(
     state: &AppState,
     schedule: ScheduledPublication,
@@ -25,6 +26,7 @@ pub async fn dispatch_schedule(
     state.database.complete_schedule(&schedule.id, &result)
 }
 
+/// Polls for due schedules and dispatches each database claim until none remain.
 pub async fn run(app: tauri::AppHandle) {
     use tauri::Manager;
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));

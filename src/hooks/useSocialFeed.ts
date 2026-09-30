@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socialApi } from "../services/desktop/social";
 import { mergeSocialPosts } from "../services/social/presentation";
+import { boundFeedPages } from "../services/social/retention";
 import type { Account } from "../types";
 import type { FeedPage, FollowedSource, ProfileFeedKind } from "../types/social";
 
+/** Selects the feed operation used for every account in a social view. */
 export type SocialFeedSource =
   | { readonly kind: "HOME" }
   | { readonly kind: "OWN"; readonly feedKind: ProfileFeedKind }
@@ -11,6 +13,7 @@ export type SocialFeedSource =
   | { readonly kind: "TAG"; readonly tag: string }
   | { readonly kind: "SOURCE"; readonly source: FollowedSource };
 
+/** Account-scoped error retained when other feeds in the same view succeed. */
 export interface SocialFeedFailure {
   readonly accountId: string;
   readonly message: string;
@@ -29,7 +32,7 @@ function load(accountId: string, source: SocialFeedSource, cursor: string | null
   }
 }
 
-/** Rejects superseded pages and permits one feed request at a time per mounted view. */
+/** Aggregates provider feeds while rejecting superseded requests and paginating per account. */
 export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSource) {
   const [pages, setPages] = useState<Readonly<Record<string, FeedPage>>>({});
   const [failures, setFailures] = useState<readonly SocialFeedFailure[]>([]);
@@ -54,7 +57,7 @@ export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSo
     if (request !== revision.current) return;
     const next: Record<string, FeedPage> = {};
     for (const result of settled) switch (result.kind) { case "PAGE": next[result.accountId] = result.page; break; case "ERROR": break; }
-    setPages(next);
+    setPages(boundFeedPages(next));
     setFailures(settled.flatMap(result => result.kind === "ERROR" ? [{ accountId: result.accountId, message: result.error }] : []));
     setLoading(false);
     inFlight.current = false;
@@ -75,7 +78,7 @@ export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSo
     setPages(current => {
       const next = { ...current };
       for (const result of settled) switch (result.kind) { case "PAGE": next[result.accountId] = { cursor: result.page.cursor, posts: [...(current[result.accountId]?.posts ?? []), ...result.page.posts] }; break; case "ERROR": break; }
-      return next;
+      return boundFeedPages(next);
     });
     setFailures(settled.flatMap(result => result.kind === "ERROR" ? [{ accountId: result.accountId, message: result.error }] : []));
     setLoading(false);

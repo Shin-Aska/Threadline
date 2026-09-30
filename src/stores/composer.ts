@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { CanonicalPost, MediaAttachment, PublishingPolicy } from "../types";
+/** Mutable authoring state shared by composer, preview, and destination controls. */
 interface ComposerState {
   publishing: boolean; setPublishing(publishing: boolean): void;
   text: string; media: MediaAttachment[]; policy: PublishingPolicy; selected: string[];
@@ -7,6 +8,7 @@ interface ComposerState {
   loadDraft(post: CanonicalPost): void;
   setPolicy(policy: PublishingPolicy): void; toggle(id: string): void; setSelected(ids: string[]): void;
 }
+/** Zustand store for the in-progress canonical post and selected destinations. */
 export const useComposerStore = create<ComposerState>((set) => ({
   publishing: false, setPublishing: (publishing) => set({ publishing }),
   text: "", media: [], policy: "COMMON_LIMIT", selected: [],

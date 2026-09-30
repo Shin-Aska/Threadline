@@ -1,3 +1,8 @@
+//! Mastodon account transport for authenticated reads, actions, and publishing.
+//!
+//! The account's instance URL scopes every request. Child modules handle
+//! normalization, discovery, media upload, and social API operations.
+
 mod capabilities;
 mod discovery;
 mod hashtags;
@@ -9,20 +14,24 @@ mod social_sources;
 mod social_write;
 use crate::{error::AppError, models::*, providers::SocialProvider};
 use async_trait::async_trait;
-use serde::Deserialize;
+/// Mastodon transport for account data, feeds, actions, and publishing.
+///
+/// Requests use the account's instance `base_url` and bearer `access_token`.
+/// Its capabilities describe the limits and features discovered for that
+/// Mastodon server and account.
 pub struct MastodonProvider {
+    /// Publishing limits and features for this account.
     pub capabilities: PlatformCapabilities,
+    /// HTTP client shared across provider requests.
     pub client: reqwest::Client,
+    /// Base URL of the account's Mastodon instance.
     pub base_url: String,
+    /// Bearer token used to authenticate requests to the instance.
     pub access_token: String,
 }
 
-#[derive(Deserialize)]
-struct StatusResponse {
-    id: String,
-}
-
-#[derive(Deserialize)]
+/// Account fields needed to verify credentials and construct a handle.
+#[derive(serde::Deserialize)]
 struct AccountResponse {
     id: String,
     username: String,
@@ -31,6 +40,10 @@ struct AccountResponse {
 }
 
 impl MastodonProvider {
+    /// Verifies the access token and returns account ID, handle, and display name.
+    ///
+    /// The handle includes the instance host when Mastodon returns only a
+    /// local username; a blank display name falls back to that username.
     pub async fn account(&self) -> Result<(String, String, String), AppError> {
         let response = self
             .client
@@ -75,7 +88,7 @@ impl MastodonProvider {
         &self,
         post: PreparedPost,
         in_reply_to_id: Option<&str>,
-    ) -> Result<PublishedPost, AppError> {
+    ) -> Result<(PublishedPost, native::Status), AppError> {
         let media_ids = self.upload_media(&post.media).await?;
         let mut form = vec![("status", post.text)];
         form.extend(media_ids.into_iter().map(|id| ("media_ids[]", id)));
@@ -105,14 +118,17 @@ impl MastodonProvider {
                 crate::providers::safe_error_body(&body)
             )));
         }
-        let status: StatusResponse = serde_json::from_str(&body)
+        let status: native::Status = serde_json::from_str(&body)
             .map_err(|error| AppError::Provider(format!("Invalid Mastodon response: {error}")))?;
-        Ok(PublishedPost {
-            remote_id: status.id,
-            remote_cid: None,
-            root_id: None,
-            root_cid: None,
-        })
+        Ok((
+            PublishedPost {
+                remote_id: status.id.clone(),
+                remote_cid: None,
+                root_id: None,
+                root_cid: None,
+            },
+            status,
+        ))
     }
 }
 #[async_trait]
@@ -212,9 +228,7 @@ impl SocialProvider for MastodonProvider {
             .json()
             .await
             .map_err(|e| AppError::Provider(format!("Invalid Mastodon timeline: {e}")))?;
-        let cleaner =
-            regex::Regex::new("<[^>]+>").map_err(|e| AppError::Provider(e.to_string()))?;
-        let posts=items.iter().filter_map(|wrapper| {let p=wrapper.get("reblog").filter(|v|!v.is_null()).unwrap_or(wrapper);let id=p["id"].as_str()?;let actor=&p["account"];let content=cleaner.replace_all(p["content"].as_str().unwrap_or(""),"").to_string();let media=p["media_attachments"].as_array().into_iter().flatten().filter_map(|m|Some(serde_json::json!({"url":m["url"].as_str()?,"alt":m["description"].as_str().unwrap_or(""),"type":m["type"].as_str().unwrap_or("image")}))).collect::<Vec<_>>();Some(serde_json::json!({"canonicalKey":format!("MASTODON:{}:{id}",self.base_url),"provider":"MASTODON","remoteId":id,"remoteUrl":p["url"].as_str().unwrap_or(""),"author":{"id":actor["id"],"displayName":actor["display_name"].as_str().filter(|v|!v.is_empty()).unwrap_or(actor["acct"].as_str().unwrap_or("")),"handle":actor["acct"].as_str().unwrap_or(""),"avatarUrl":actor["avatar"].as_str()},"text":content,"createdAt":p["created_at"].as_str().unwrap_or(""),"media":media,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"MASTODON"}],"metrics":{"replies":p["replies_count"],"reposts":p["reblogs_count"],"likes":p["favourites_count"]},"capabilities":{"openOriginal":true,"reply":false,"like":false,"repost":false}}))}).collect::<Vec<_>>();
+        let posts=items.iter().filter_map(|wrapper| {let p=wrapper.get("reblog").filter(|v|!v.is_null()).unwrap_or(wrapper);let id=p["id"].as_str()?;let actor=&p["account"];let content=normalize::status_text(p["content"].as_str().unwrap_or(""));let media=p["media_attachments"].as_array().into_iter().flatten().filter_map(|m|Some(serde_json::json!({"url":m["url"].as_str()?,"alt":m["description"].as_str().unwrap_or(""),"type":m["type"].as_str().unwrap_or("image")}))).collect::<Vec<_>>();Some(serde_json::json!({"canonicalKey":format!("MASTODON:{}:{id}",self.base_url),"provider":"MASTODON","remoteId":id,"remoteUrl":p["url"].as_str().unwrap_or(""),"author":{"id":actor["id"],"displayName":actor["display_name"].as_str().filter(|v|!v.is_empty()).unwrap_or(actor["acct"].as_str().unwrap_or("")),"handle":actor["acct"].as_str().unwrap_or(""),"avatarUrl":actor["avatar"].as_str()},"text":content,"contentWarning":p["spoiler_text"].as_str(),"sensitive":p["sensitive"].as_bool().unwrap_or(false),"createdAt":p["created_at"].as_str().unwrap_or(""),"media":media,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"MASTODON"}],"metrics":{"replies":p["replies_count"],"reposts":p["reblogs_count"],"likes":p["favourites_count"]},"capabilities":{"openOriginal":true,"reply":false,"like":false,"repost":false}}))}).collect::<Vec<_>>();
         let cursor = items
             .last()
             .and_then(|v| v.get("id"))
@@ -244,14 +258,18 @@ impl SocialProvider for MastodonProvider {
         Ok(self.capabilities.clone())
     }
     async fn publish(&self, post: PreparedPost) -> Result<PublishedPost, AppError> {
-        self.create_status(post, None).await
+        self.create_status(post, None)
+            .await
+            .map(|(published, _)| published)
     }
     async fn reply(
         &self,
         parent: &PublishedPost,
         post: PreparedPost,
     ) -> Result<PublishedPost, AppError> {
-        self.create_status(post, Some(&parent.remote_id)).await
+        self.create_status(post, Some(&parent.remote_id))
+            .await
+            .map(|(published, _)| published)
     }
 }
 
@@ -277,8 +295,8 @@ mod tests {
                 .to_ascii_lowercase()
                 .contains("authorization: bearer token"));
             assert!(request.contains("status=hello"));
-            socket
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"id\":\"42\"}")
+            let body = r#"{"id":"42","created_at":"2026-09-20T01:00:00Z","content":"<p>hello</p>","account":{"id":"7","acct":"me"}}"#;
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
                 .expect("response");
         });
         let provider = MastodonProvider {

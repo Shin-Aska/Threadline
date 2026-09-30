@@ -2,6 +2,7 @@ import type { FollowingCollection, Provider, SourceAttribution, UnifiedFeedPage,
 
 const uniqueSources = (sources: readonly SourceAttribution[]) => [...new Map(sources.map(source => [source.accountId, source])).values()];
 
+/** Merges duplicate canonical posts, combines their account sources, and sorts newest first. */
 export function mergePosts(pages: readonly UnifiedFeedPage[]): UnifiedPost[] {
   const merged = new Map<string, UnifiedPost>();
   for (const post of pages.flatMap(page => page.posts)) {
@@ -11,11 +12,13 @@ export function mergePosts(pages: readonly UnifiedFeedPage[]): UnifiedPost[] {
   return [...merged.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
+/** Keeps posts visible from the chosen accounts and optional provider filter. */
 export function filterPosts(posts: readonly UnifiedPost[], accountIds: readonly string[], provider: Provider | "ALL" = "ALL") {
   const allowed = new Set(accountIds);
   return posts.filter(post => post.provider === provider || provider === "ALL").map(post => ({ ...post, sources: post.sources.filter(source => allowed.has(source.accountId)) })).filter(post => post.sources.length);
 }
 
+/** Combines same-named topics across providers and adds counts where present. */
 export function mergeTopics(topics: readonly UnifiedTopic[]): UnifiedTopic[] {
   const merged = new Map<string, UnifiedTopic>();
   for (const topic of topics) {
@@ -29,6 +32,7 @@ export function mergeTopics(topics: readonly UnifiedTopic[]): UnifiedTopic[] {
   return [...merged.values()].sort((a, b) => (b.postCount ?? -1) - (a.postCount ?? -1));
 }
 
+/** Filters post attribution to the accounts represented by a collection. */
 export function collectionPosts(collection: FollowingCollection, posts: readonly UnifiedPost[]) {
   const accountIds = new Set(collection.sources.map(source => source.accountId));
   return posts.map(post => ({ ...post, sources: post.sources.filter(source => accountIds.has(source.accountId)) })).filter(post => post.sources.length);

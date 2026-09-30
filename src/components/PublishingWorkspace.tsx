@@ -29,6 +29,7 @@ const tabs: readonly {
   { id: "PUBLISHED", label: "Published", icon: Clock },
 ];
 
+/** Coordinates draft editing, scheduling, and publication history for the composer. */
 export function PublishingWorkspace(props: PublishingProps) {
   const [tab, setTab] = useState<PublishingTab>("NEW");
   const [drafts, setDrafts] = useState<readonly DraftRecord[]>([]);

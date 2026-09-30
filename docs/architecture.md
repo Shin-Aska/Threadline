@@ -46,11 +46,13 @@ The current social commands are `get_home_feed`, `get_own_feed`, `get_own_profil
 
 ## Renderer state and retained pages
 
-`App.tsx` keeps every page that has been visited mounted and hides inactive pages. This preserves the composer and loaded page state while navigating. A detail route hides the underlying page without unmounting it. Components that issue background work must therefore gate it on their `active` prop rather than assume an inactive page was unmounted.
+`App.tsx` keeps every page that has been visited mounted and hides inactive pages. The set is finite (the eight top-level pages), which preserves the composer, filters, Back behavior, account selection, and scroll restoration while navigating. A detail route hides the underlying page without unmounting it. Components that issue background work must therefore gate it on their `active` prop rather than assume an inactive page was unmounted.
 
 `useWorkspaceNavigation` stores a sequence-bearing state object in browser history. Before a push it saves the current scroll position, then it focuses `#main` and scrolls to the top. `popstate` restores the saved scroll position for the history entry. Route query parameters describe the current view and target, but the validated history state is the navigation source of truth.
 
 `useSocialFeed` reads selected accounts in parallel and keeps a revision counter so an earlier result cannot replace a later load. It allows only one initial refresh or pagination request at a time. Per-account errors remain visible while successful accounts continue to contribute posts; presentation code then merges duplicate canonical posts and applies filters.
+
+Mounted feed state has a separate, deterministic **500 post-bearing row per view** bound. The bound is aggregate across accounts and, in Following, across source feeds. Notifications applies the same bound to notifications containing posts. Existing displayed rows are retained; once the bound is reached cursors are cleared and that view stops offering pagination until it is refreshed or its account/source scope changes. This is deliberately not the configurable response-cache budget: mounted React state remains visible after a cache entry is evicted.
 
 `FollowingView` uses the ordinary home stream for its People collection and separately reads non-person followed sources. It limits source-feed requests to four concurrent calls, which avoids turning a large following list into an unbounded burst of provider requests. Source and feed requests each use a revision counter to discard stale results.
 
@@ -66,7 +68,19 @@ The current social commands are `get_home_feed`, `get_own_feed`, `get_own_profil
 | Notifications | 20 seconds |
 | Profiles and followed-source indexes | 2 minutes |
 
-Each cache hit is promoted to most recently used. Entries beyond 96 evict from the oldest end. `refresh: true` discards the matching key before loading. Any social mutation invalidates every cache entry for the acting account both before and after the native call, including when it fails; callers can therefore never rely on an account read surviving a mutation attempt.
+Each cache hit is promoted to most recently used. Entries beyond **96** evict from the oldest end. In addition, Settings offers aggregate completed-response post budgets of Off, 50, 100, 250 (the default), or 500. Feed post arrays, a thread's root/ancestors/replies, and notifications containing a post contribute to that total; profile and followed-source metadata do not. Lowering the budget evicts least-recently-used entries immediately, and a response larger than the budget is returned to its original caller but not retained.
+
+**Off** means a pending post-bearing read can still coalesce concurrent callers, and its original result still displays normally. As soon as that read completes it is removed, so a later caller performs a new provider read. Non-post reference responses remain subject to the 96-entry and TTL limits. `refresh: true` discards the matching key before loading. Any social mutation invalidates every cache entry for the acting account both before and after the native call, including when it fails; callers can therefore never rely on an account read surviving a mutation attempt.
+
+Only the numeric cache-budget preference is stored in `localStorage`; an invalid value or unavailable storage falls back safely to 250. Timelines, posts, profiles, threads, notifications, provider responses, media, and mounted-view state are memory-only. They are not written to `localStorage`, IndexedDB, SQLite, or files. The cache budget therefore does **not** claim to cap total application memory: WebKit, decoded media, component state, and the independently bounded mounted views also consume memory.
+
+## Linux package runtime strategy
+
+The AppImage deliberately treats GLib/GObject/GIO and nghttp2 as host ABI boundaries. Tauri's GTK linuxdeploy plugin otherwise bundles the build host's GLib family while GIO discovers target-host modules such as dconf and libproxy; likewise an old bundled nghttp2 can satisfy a newer host curl by SONAME while lacking required symbols. The pinned packaging preparation removes the plugin's forced GObject/GIO additions, and linuxdeploy exclusions keep GLib, GObject, GIO, GModule, and nghttp2 out of the image. Thus host GIO modules use host GLib and host curl uses host nghttp2 as coherent distribution-managed sets.
+
+Tauri's supported `bundleMediaFramework` AppImage option is enabled. Its GStreamer plugin bundles the core, plugin scanner, and installed runtime plugins together and constrains plugin discovery to that directory. Build hosts install `gstreamer1.0-plugins-good` (which provides `libgstautodetect.so` and `autoaudiosink`) and `gstreamer1.0-pulseaudio`; Debian packages recommend the same runtime packages. These are runtime packages, not development packages. GTK theme integration modules from KDE remain optional and a missing theme module is not treated as equivalent to a fatal loader symbol error.
+
+`scripts/audit-appimage.sh` enforces the ABI-boundary library policy and media plugin presence after extraction. `scripts/smoke-appimage.sh` is the repeatable Kubuntu validation command: pass it the built AppImage to start the extracted package under isolated D-Bus/Xvfb, reject known loader/media failures, and require both the Tauri and WebKit processes.
 
 ## Boundaries and limits
 

@@ -1,4 +1,7 @@
+//! Uploads MP4 video through the Bluesky video service after checking live account limits.
+
 mod auth;
+use super::BlueskyProvider;
 use crate::{error::AppError, models::PreparedMedia};
 use auth::ServiceAuthSource;
 use serde::Deserialize;
@@ -11,6 +14,7 @@ const VIDEO_MIME: &str = "video/mp4";
 const PROCESSING_TIMEOUT: Duration = Duration::from_secs(300);
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+/// Current account allowance reported by the video service.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UploadLimits {
@@ -21,6 +25,7 @@ struct UploadLimits {
     error: Option<String>,
 }
 
+/// Processing state and optional completed blob for a video upload.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct JobStatus {
@@ -32,12 +37,14 @@ struct JobStatus {
     message: Option<String>,
 }
 
+/// Video service wrapper around the current processing job.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct JobResponse {
     job_status: JobStatus,
 }
 
+/// Uses the public video service in production and the supplied fixture URL in tests.
 pub(super) fn service_url(pds_url: &str) -> &str {
     #[cfg(test)]
     {
@@ -50,27 +57,24 @@ pub(super) fn service_url(pds_url: &str) -> &str {
     }
 }
 
+/// Uploads an MP4 using service tokens obtained from an app-password session.
 pub(super) async fn upload_video(
-    client: &reqwest::Client,
-    pds_url: &str,
+    provider: &BlueskyProvider,
     video_service_url: &str,
-    access_jwt: &str,
     did: &str,
     video: &PreparedMedia,
 ) -> Result<serde_json::Value, AppError> {
     upload_video_with_auth(
-        client,
+        &provider.client,
         video_service_url,
         did,
         video,
-        ServiceAuthSource::Bearer {
-            pds_url,
-            access_jwt,
-        },
+        ServiceAuthSource::Bearer(provider),
     )
     .await
 }
 
+/// Uploads an MP4 using service tokens obtained through the OAuth runtime.
 pub(super) async fn upload_video_oauth(
     oauth: &crate::oauth::bluesky::BlueskyOAuthRuntime,
     client: &reqwest::Client,
@@ -98,7 +102,7 @@ async fn upload_video_with_auth(
     if video.mime_type != VIDEO_MIME {
         return Err(AppError::Validation("Bluesky video must be MP4".into()));
     }
-    let limits_token = auth.token(client, "app.bsky.video.getUploadLimits").await?;
+    let limits_token = auth.token("app.bsky.video.getUploadLimits").await?;
     let limits: UploadLimits = response_json(
         client
             .get(format!(
@@ -112,7 +116,7 @@ async fn upload_video_with_auth(
     .await?;
     validate_limits(&limits, video.data.len())?;
 
-    let upload_token = auth.token(client, "app.bsky.video.uploadVideo").await?;
+    let upload_token = auth.token("app.bsky.video.uploadVideo").await?;
     let response: JobResponse = response_json(
         client
             .post(format!(

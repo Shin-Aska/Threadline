@@ -1,9 +1,11 @@
+//! Command scenarios cover blocked publication and reconnecting a custom Bluesky service.
 use super::*;
 use crate::{
     accounts::mock_accounts, config::ProviderMap, credentials::CredentialStore, database::Database,
 };
 use std::sync::RwLock;
 
+/// Credential store that fails every operation in disconnected-account scenarios.
 struct UnusedCredentials;
 impl CredentialStore for UnusedCredentials {
     fn set(&self, _: &str, _: &str) -> Result<(), AppError> {
@@ -66,6 +68,7 @@ async fn unconnected_legacy_accounts_cannot_report_published() {
 }
 
 #[derive(Default)]
+/// In-memory credential store for the reconnect scenario.
 struct MemoryCredentials(std::sync::Mutex<std::collections::HashMap<String, String>>);
 impl CredentialStore for MemoryCredentials {
     fn set(&self, id: &str, secret: &str) -> Result<(), AppError> {

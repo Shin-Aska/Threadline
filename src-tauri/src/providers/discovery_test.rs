@@ -1,3 +1,6 @@
+//! Checks that each provider builds discovery results from its native topics
+//! and suggested accounts.
+
 use super::{bluesky::BlueskyProvider, mastodon::MastodonProvider, SocialProvider};
 
 fn mastodon(base_url: String) -> MastodonProvider {

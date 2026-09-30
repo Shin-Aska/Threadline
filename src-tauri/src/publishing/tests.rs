@@ -1,3 +1,4 @@
+//! Ledger scenarios cover ambiguous replies, concurrent claims, and scheduled snapshots.
 use super::*;
 use crate::{
     accounts::mock_accounts,
@@ -14,6 +15,7 @@ use std::sync::{
     Arc, Mutex, RwLock,
 };
 
+/// Credential store unused by provider dispatch scenarios.
 struct UnusedCredentials;
 
 impl CredentialStore for UnusedCredentials {
@@ -28,6 +30,7 @@ impl CredentialStore for UnusedCredentials {
     }
 }
 
+/// Provider that succeeds on the first segment and loses the reply response.
 struct SecondSegmentUncertain {
     calls: AtomicUsize,
     capabilities: PlatformCapabilities,
@@ -144,6 +147,7 @@ async fn concurrent_publish_requests_dispatch_each_destination_once() {
     assert_eq!(provider.calls.load(Ordering::SeqCst), 2);
 }
 
+/// Provider that records text sent from draft and scheduled revisions.
 struct RecordingProvider {
     texts: Mutex<Vec<String>>,
     capabilities: PlatformCapabilities,

@@ -1,9 +1,10 @@
-import { ArrowLeftRight, Bell, ChevronDown, Compass, Feather, Home, Plus, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeftRight, Bell, ChevronDown, Compass, Feather, Home, Plus, Settings2, ShieldCheck, Users } from "lucide-react";
 import packageJson from "../../package.json";
 import type { ReactNode } from "react";
 import type { Account, WorkspaceMode } from "../types";
 
-export type Page = "notifications" | "myprofiles" | "timeline" | "discover" | "following" | "composer" | "accounts";
+/** Top-level workspace destinations managed by the app shell. */
+export type Page = "notifications" | "myprofiles" | "timeline" | "discover" | "following" | "composer" | "accounts" | "settings";
 interface ShellProps {
   readonly accounts: readonly Account[];
   readonly connectedAccountIds: readonly string[];
@@ -15,6 +16,7 @@ interface ShellProps {
   readonly onCompose: () => void;
   readonly children: ReactNode;
 }
+/** Shared desktop layout with navigation rails, account status, and active content. */
 export function AppShell({ accounts, connectedAccountIds, page, mode, onNavigate, profileAccountId, onProfileAccount, onCompose, children }: ShellProps) {
   const connectedCount = accounts.filter(account => connectedAccountIds.includes(account.id)).length;
   const connectionSummary = `${connectedCount} connected ${connectedCount === 1 ? "account" : "accounts"}`;
@@ -30,6 +32,7 @@ export function AppShell({ accounts, connectedAccountIds, page, mode, onNavigate
         <button className={page === "following" ? "nav-item active" : "nav-item"} aria-current={page === "following" ? "page" : undefined} onClick={() => onNavigate("following")} title="Following"><Users size={18} /><span>Following</span></button>
         <button className={page === "composer" ? "nav-item active" : "nav-item"} aria-current={page === "composer" ? "page" : undefined} onClick={() => onNavigate("composer")} title="Composer"><Feather size={18} /><span>Composer</span></button>
         <button className={page === "accounts" ? "nav-item active" : "nav-item"} aria-label="Accounts & Sync" aria-current={page === "accounts" ? "page" : undefined} aria-describedby="connected-account-count" onClick={() => onNavigate("accounts")} title={"Accounts & Sync · " + connectionSummary}><ArrowLeftRight size={18} /><span>Accounts & Sync</span><small className="connected-count" aria-hidden="true">{connectedCount}</small></button>
+        <button className={page === "settings" ? "nav-item active" : "nav-item"} aria-current={page === "settings" ? "page" : undefined} onClick={() => onNavigate("settings")} title="Settings"><Settings2 size={18} /><span>Settings</span></button>
       </nav>
       <p className="sr-only" id="connected-account-count" role="status">{connectionSummary}</p>
       <div className="sidebar-bottom"><div className="local-note"><ShieldCheck size={18} /><div><strong>Your accounts. Your control.</strong><p>Credentials are kept in your system’s secure credential store.</p></div></div><span className="version">THREADLINE / {packageJson.version}</span></div>

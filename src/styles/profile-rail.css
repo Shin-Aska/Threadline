@@ -1,0 +1,40 @@
+.profile-rail {
+  display: grid;
+  gap: var(--space-4);
+  width: var(--context-rail-width);
+}
+
+.profile-rail-profiles {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-rail-list {
+  max-height: 40dvh;
+  overflow-y: auto;
+}
+
+.profile-rail-list .actor-row > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-rail-list .actor-row[aria-current="true"] {
+  background: var(--container);
+}
+
+@media (max-width: 1180px) {
+  .profile-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-rail-list {
+    max-height: 40dvh;
+  }
+}
+
+@media (max-width: 760px) {
+  .profile-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

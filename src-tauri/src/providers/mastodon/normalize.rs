@@ -1,3 +1,5 @@
+//! Maps Mastodon accounts and statuses to provider-neutral social models.
+
 use crate::{
     error::AppError,
     models::ProviderKind,
@@ -6,6 +8,7 @@ use crate::{
 
 use super::native;
 
+/// Uses the account handle when Mastodon leaves the display name blank.
 pub(super) fn actor(value: native::Account) -> Actor {
     let display_name = if value.display_name.trim().is_empty() {
         value.acct.clone()
@@ -20,11 +23,16 @@ pub(super) fn actor(value: native::Account) -> Actor {
     }
 }
 
+pub(super) fn status_text(content: &str) -> String {
+    dom_query::Document::fragment(content)
+        .formatted_text()
+        .to_string()
+}
+
+/// Normalizes a status or its nested reblog, including attachments and viewer state.
 pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, AppError> {
     let value = value.reblog.as_deref().cloned().unwrap_or(value);
-    let cleaner =
-        regex::Regex::new("<[^>]+>").map_err(|error| AppError::Provider(error.to_string()))?;
-    let text = cleaner.replace_all(&value.content, "").to_string();
+    let text = status_text(&value.content);
     let reply_parent_id = value.in_reply_to_id.clone();
     Ok(SocialPost {
         canonical_key: format!("MASTODON:{base_url}:{}", value.id),
@@ -34,6 +42,8 @@ pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, 
         remote_cid: None,
         author: actor(value.account),
         text,
+        content_warning: (!value.spoiler_text.trim().is_empty()).then_some(value.spoiler_text),
+        sensitive: value.sensitive,
         created_at: value.created_at,
         media: value
             .media_attachments
@@ -42,6 +52,7 @@ pub(super) fn post(base_url: &str, value: native::Status) -> Result<SocialPost, 
                 url: media.url,
                 alt: media.description.unwrap_or_default(),
                 media_type: media.media_type,
+                thumbnail: None,
             })
             .collect(),
         metrics: PostMetrics {

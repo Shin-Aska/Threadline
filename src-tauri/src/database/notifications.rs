@@ -1,3 +1,8 @@
+//! Local notification read markers, scoped to a connected account.
+//!
+//! The database retains read IDs across restarts and cascades their removal
+//! when the owning account is deleted.
+
 use std::collections::HashSet;
 
 use rusqlite::params;
@@ -7,6 +12,7 @@ use crate::error::AppError;
 use super::Database;
 
 impl Database {
+    /// Creates the account-scoped table that records locally read notifications.
     pub(super) fn initialize_notification_reads(&self) -> Result<(), AppError> {
         self.connection()?.execute_batch(
             "CREATE TABLE IF NOT EXISTS notification_reads (
@@ -20,6 +26,9 @@ impl Database {
         Ok(())
     }
 
+    /// Records notification IDs as read for one account in a transaction.
+    ///
+    /// Duplicate IDs are ignored, making repeated marks safe.
     pub fn mark_notifications_read_local(
         &self,
         account_id: &str,
@@ -38,6 +47,7 @@ impl Database {
         Ok(())
     }
 
+    /// Returns the notification IDs previously marked read for one account.
     pub fn notification_read_ids(&self, account_id: &str) -> Result<HashSet<String>, AppError> {
         let connection = self.connection()?;
         let mut statement = connection

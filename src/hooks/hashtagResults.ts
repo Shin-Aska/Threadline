@@ -1,10 +1,12 @@
 import type { Account, HashtagActivity, Provider } from "../types";
 import type { HashtagResult } from "./useHashtags";
 
+/** One normalized hashtag with the activity reported by each matching account. */
 export interface HashtagRow {
   readonly name: string;
   readonly sources: readonly { readonly account: Account; readonly activity: HashtagActivity }[];
 }
+/** Groups ready suggestions by case-insensitive name and optional provider filter. */
 export function aggregateHashtags(accounts: readonly Account[], results: Readonly<Record<string, HashtagResult>>, filter: Provider | "ALL"): readonly HashtagRow[] {
   const rows = new Map<string, { name: string; sources: { account: Account; activity: HashtagActivity }[] }>();
   for (const account of accounts) {
@@ -21,6 +23,7 @@ export function aggregateHashtags(accounts: readonly Account[], results: Readonl
   return [...rows.values()];
 }
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+/** Formats provider-specific counts without adding unlike measures together. */
 export function hashtagActivity(row: HashtagRow): { readonly label: string; readonly detail: string } {
   let matches: number | null = null;
   const instances = new Map<string, number>();

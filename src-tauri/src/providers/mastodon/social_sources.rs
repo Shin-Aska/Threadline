@@ -1,3 +1,5 @@
+//! Loads followed people, tags, and lists, then maps their feeds and inbox activity.
+
 use crate::{
     error::AppError,
     models::ProviderKind,
@@ -10,6 +12,7 @@ use crate::{
 use super::{native, normalize, MastodonProvider};
 
 impl MastodonProvider {
+    /// Pages followed accounts; followed tags and lists appear on the first page only.
     pub(super) async fn followed_sources_page_impl(
         &self,
         cursor: Option<&str>,
@@ -33,7 +36,9 @@ impl MastodonProvider {
         if let Some(cursor) = cursor {
             people_request = people_request.query(&[("max_id", cursor)]);
         }
-        let people: Vec<native::Account> = self.social_get(people_request, "following").await?;
+        let (people, headers): (Vec<native::Account>, _) = self
+            .social_get_with_headers(people_request, "following")
+            .await?;
         let (tags, lists) = if cursor.is_none() {
             let tags: Vec<native::Tag> = self
                 .social_get(
@@ -52,7 +57,7 @@ impl MastodonProvider {
         } else {
             (Vec::new(), Vec::new())
         };
-        let cursor = people.last().map(|account| account.id.clone());
+        let cursor = next_max_id(&headers);
         let mut sources = people
             .into_iter()
             .map(|account| FollowedSource {
@@ -87,6 +92,7 @@ impl MastodonProvider {
         Ok(SourcePage { sources, cursor })
     }
 
+    /// Routes person, tag, and list sources to their Mastodon timeline endpoints.
     pub(super) async fn source_feed_page(
         &self,
         source: &FollowedSource,
@@ -122,6 +128,7 @@ impl MastodonProvider {
         }
     }
 
+    /// Normalizes inbox activity and uses the last notification ID as cursor.
     pub(super) async fn notification_page(
         &self,
         cursor: Option<&str>,
@@ -164,4 +171,34 @@ impl MastodonProvider {
             cursor,
         })
     }
+}
+
+fn next_max_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    for header in headers
+        .get_all(reqwest::header::LINK)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+    {
+        for entry in header.split(',') {
+            let Some((url, attributes)) = entry.split_once('>') else {
+                continue;
+            };
+            if !attributes
+                .split(';')
+                .any(|part| part.trim() == "rel=\"next\"" || part.trim() == "rel=next")
+            {
+                continue;
+            }
+            let Some(url) = url.trim().strip_prefix('<') else {
+                continue;
+            };
+            let Ok(url) = reqwest::Url::parse(url) else {
+                continue;
+            };
+            if let Some((_, value)) = url.query_pairs().find(|(key, _)| key == "max_id") {
+                return Some(value.into_owned());
+            }
+        }
+    }
+    None
 }

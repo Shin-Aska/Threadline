@@ -1,3 +1,4 @@
+//! Threadline's Tauri application assembly and shared runtime state.
 #[cfg(test)]
 pub mod accounts;
 pub mod commands;
@@ -18,6 +19,7 @@ use credentials::{CredentialStore, OsKeychainCredentialStore};
 use database::Database;
 use std::sync::Arc;
 use std::sync::RwLock;
+/// Shared database, active providers, credential store, and OAuth coordinator.
 pub struct AppState {
     pub database: Database,
     pub providers: RwLock<config::ProviderMap>,
@@ -43,6 +45,7 @@ mod startup_tests {
     }
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Initializes persistent state and registers the frontend command surface.
 pub fn run() {
     #[cfg(target_os = "linux")]
     configure_linux_webkit();

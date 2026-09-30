@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use super::{native, normalize, BlueskyProvider};
 
 impl BlueskyProvider {
+    /// Pages followed actors; lists and saved feeds appear on the first page only.
     pub(super) async fn followed_sources_page_impl(
         &self,
         cursor: Option<&str>,
@@ -94,6 +95,7 @@ impl BlueskyProvider {
         })
     }
 
+    /// Routes a followed source to its actor, tag, list, or custom feed endpoint.
     pub(super) async fn source_feed_page(
         &self,
         source: &FollowedSource,
@@ -144,6 +146,7 @@ impl BlueskyProvider {
         }
     }
 
+    /// Returns inbox events even when a related post cannot be enriched.
     pub(super) async fn notification_page(
         &self,
         cursor: Option<&str>,
@@ -226,6 +229,7 @@ impl BlueskyProvider {
         })
     }
 
+    /// Updates the account's seen timestamp when at least one notification ID is supplied.
     pub(super) async fn mark_read(&self, ids: &[String]) -> Result<(), AppError> {
         if ids.is_empty() {
             return Ok(());

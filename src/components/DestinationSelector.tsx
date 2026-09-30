@@ -11,6 +11,7 @@ interface DestinationSelectorProps {
   readonly onAccounts: () => void;
 }
 
+/** Lets the composer choose which connected accounts receive the post. */
 export function DestinationSelector({ workspace, disabled, onAccounts }: DestinationSelectorProps) {
   const { selected, toggle } = useComposerStore();
   const [open, setOpen] = useState(false);

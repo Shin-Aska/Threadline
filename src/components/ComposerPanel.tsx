@@ -36,6 +36,7 @@ interface ComposerProps {
   readonly onQueueChanged: () => void;
 }
 
+/** Edits the canonical post and manages draft, schedule, preview, and publish actions. */
 export function ComposerPanel({
   workspace,
   refreshing,

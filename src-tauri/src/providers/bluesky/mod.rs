@@ -18,16 +18,30 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+/// Bluesky transport for reading feeds and publishing through AT Protocol.
+///
+/// App-password accounts reuse a short-lived session held in
+/// `app_password_session`. OAuth accounts instead use `oauth` for authenticated
+/// requests and refresh. The other fields hold the service and account settings,
+/// HTTP client, and publishing capabilities.
 pub struct BlueskyProvider {
+    /// Cached app-password sign-in, or a brief failed-sign-in cooldown.
     pub(crate) app_password_session: tokio::sync::Mutex<AppPasswordSessionState>,
+    /// Publishing limits and features for this account.
     pub capabilities: PlatformCapabilities,
+    /// HTTP client shared across provider requests.
     pub client: reqwest::Client,
+    /// Base URL of the account's AT Protocol service.
     pub service_url: String,
+    /// Identifier supplied for app-password sign-in.
     pub identifier: String,
+    /// App password used only for app-password authentication.
     pub app_password: String,
+    /// OAuth runtime when this account authenticates with OAuth.
     pub oauth: Option<Arc<crate::oauth::bluesky::BlueskyOAuthRuntime>>,
 }
 
+/// Identity and bearer token returned by app-password session creation.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SessionResponse {
@@ -36,22 +50,54 @@ pub(crate) struct SessionResponse {
     pub(crate) handle: String,
 }
 
+/// Cached state of an app-password session.
+///
+/// An active session can be reused for 20 minutes; a failed sign-in prevents
+/// another attempt for five seconds.
 #[derive(Default)]
 pub(crate) enum AppPasswordSessionState {
     #[default]
+    /// No reusable session or recent failure exists.
     Empty,
+    /// A successful session and the instant it was created.
     Active {
         created: Instant,
         session: SessionResponse,
     },
-    Failed {
-        created: Instant,
-    },
+    /// A recent sign-in failure and the instant it occurred.
+    Failed { created: Instant },
 }
+/// Remote identifiers returned after a Bluesky record is created.
 #[derive(Deserialize)]
 struct RecordResponse {
     uri: String,
     cid: String,
+}
+
+/// Validates an app-password service endpoint before sending credentials.
+///
+/// Production endpoints must use HTTPS and omit user info, query, and fragment.
+/// HTTP loopback is permitted in tests so local mock servers can exercise the transport.
+pub(crate) fn validate_app_password_service_url(service_url: &str) -> Result<(), AppError> {
+    let url = reqwest::Url::parse(service_url)
+        .map_err(|_| AppError::Validation("Invalid Bluesky service URL".into()))?;
+    let test_loopback = cfg!(test)
+        && url.scheme() == "http"
+        && url
+            .host_str()
+            .and_then(|host| host.parse::<std::net::IpAddr>().ok())
+            .is_some_and(|ip| ip.is_loopback());
+    if !(url.scheme() == "https" || test_loopback)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AppError::Validation(
+            "Bluesky service URL must use HTTPS without credentials, query, or fragment".into(),
+        ));
+    }
+    Ok(())
 }
 
 impl BlueskyProvider {
@@ -61,8 +107,18 @@ impl BlueskyProvider {
                 "OAuth accounts do not expose bearer sessions".into(),
             ));
         }
+        validate_app_password_service_url(&self.service_url)?;
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(!cfg!(test))
+            .user_agent(concat!("Threadline/", env!("CARGO_PKG_VERSION")));
+        #[cfg(test)]
+        let client = client.no_proxy();
+        let client = client
+            .build()
+            .map_err(|error| AppError::Provider(format!("Bluesky client failed: {error}")))?;
         self.request(
-            self.client.post(format!(
+            client.post(format!(
                 "{}/xrpc/com.atproto.server.createSession",
                 self.service_url.trim_end_matches('/')
             )),
@@ -119,6 +175,10 @@ impl BlueskyProvider {
         }
     }
 
+    /// Resolves the authenticated account's DID and handle.
+    ///
+    /// Uses the OAuth subject and profile for OAuth accounts, or the cached
+    /// app-password session for app-password accounts.
     pub async fn account(&self) -> Result<(String, String), AppError> {
         if let Some(oauth) = &self.oauth {
             #[derive(Deserialize)]
@@ -135,6 +195,7 @@ impl BlueskyProvider {
         Ok((session.did, session.handle))
     }
 
+    /// Resolves the account DID from the OAuth subject or active password session.
     pub(super) async fn account_did(&self) -> Result<String, AppError> {
         match &self.oauth {
             Some(oauth) => Ok(oauth.subject().into()),
@@ -142,6 +203,7 @@ impl BlueskyProvider {
         }
     }
 
+    /// Fetches JSON from an AT Protocol XRPC endpoint with the standard timeout.
     pub(super) async fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -151,6 +213,10 @@ impl BlueskyProvider {
             .await
     }
 
+    /// Fetches XRPC JSON using OAuth or a cached app-password session.
+    ///
+    /// A bearer-session 401 invalidates that session and retries once with a
+    /// newly created session; OAuth refresh and retry remain owned by its runtime.
     pub(super) async fn get_json_with_timeout<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -190,6 +256,7 @@ impl BlueskyProvider {
             .map_err(|error| AppError::Provider(format!("Bluesky request failed: {error}")))
     }
 
+    /// Sends a JSON XRPC request through the account's configured auth flow.
     pub(super) async fn post_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -218,6 +285,7 @@ impl BlueskyProvider {
         response_json(response).await
     }
 
+    /// Uploads a binary XRPC body with its media type and configured auth flow.
     pub(super) async fn post_bytes<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -322,16 +390,9 @@ impl BlueskyProvider {
                     )
                     .await?
                 }
-                (None, Some(session)) => {
-                    video::upload_video(
-                        &self.client,
-                        &self.service_url,
-                        video::service_url(&self.service_url),
-                        &session.access_jwt,
-                        &did,
-                        video,
-                    )
-                    .await?
+                (None, Some(_)) => {
+                    video::upload_video(self, video::service_url(&self.service_url), &did, video)
+                        .await?
                 }
                 (Some(_), Some(_)) | (None, None) => return Err(AppError::StateUnavailable),
             };
@@ -356,23 +417,13 @@ impl BlueskyProvider {
                         )
                         .await?
                     }
-                    (None, Some(session)) => {
-                        let response = self
-                            .client
-                            .post(format!(
-                                "{}/xrpc/com.atproto.repo.uploadBlob",
-                                self.service_url.trim_end_matches('/')
-                            ))
-                            .bearer_auth(&session.access_jwt)
-                            .header(reqwest::header::CONTENT_TYPE, &image.mime_type)
-                            .timeout(std::time::Duration::from_secs(60))
-                            .body(image.data.to_vec())
-                            .send()
-                            .await
-                            .map_err(|error| {
-                                AppError::Provider(format!("Bluesky image upload failed: {error}"))
-                            })?;
-                        response_json(response).await?
+                    (None, Some(_)) => {
+                        self.post_bytes(
+                            "com.atproto.repo.uploadBlob",
+                            &image.mime_type,
+                            image.data.to_vec(),
+                        )
+                        .await?
                     }
                     (Some(_), Some(_)) | (None, None) => return Err(AppError::StateUnavailable),
                 };
@@ -399,17 +450,9 @@ impl BlueskyProvider {
                 self.post_json("com.atproto.repo.createRecord", body)
                     .await?
             }
-            (None, Some(session)) => {
-                self.request(
-                    self.client
-                        .post(format!(
-                            "{}/xrpc/com.atproto.repo.createRecord",
-                            self.service_url.trim_end_matches('/')
-                        ))
-                        .bearer_auth(&session.access_jwt),
-                    body,
-                )
-                .await?
+            (None, Some(_)) => {
+                self.post_json("com.atproto.repo.createRecord", body)
+                    .await?
             }
             (Some(_), Some(_)) | (None, None) => return Err(AppError::StateUnavailable),
         };
@@ -525,13 +568,13 @@ impl SocialProvider for BlueskyProvider {
         account_handle: &str,
         cursor: Option<&str>,
     ) -> Result<serde_json::Value, AppError> {
-        let mut query = vec![("limit", "50")];
-        if let Some(cursor) = cursor {
-            query.push(("cursor", cursor));
-        }
-        let native: serde_json::Value = self.get_json("app.bsky.feed.getTimeline", &query).await?;
-        let posts = native["feed"].as_array().into_iter().flatten().filter_map(|item| { let post=&item["post"]; let uri=post["uri"].as_str()?; let author=&post["author"]; let record=&post["record"]; let handle=author["handle"].as_str().unwrap_or(""); let rkey=uri.rsplit('/').next().unwrap_or(""); let media=item["post"]["embed"]["images"].as_array().map(|images| images.iter().map(|image| serde_json::json!({"url":image["fullsize"],"alt":image["alt"].as_str().unwrap_or(""),"type":"image"})).collect::<Vec<_>>()).unwrap_or_default(); Some(serde_json::json!({"canonicalKey":format!("BLUESKY:{uri}"),"provider":"BLUESKY","remoteId":uri,"remoteUrl":format!("https://bsky.app/profile/{handle}/post/{rkey}"),"author":{"id":author["did"],"displayName":author["displayName"].as_str().unwrap_or(handle),"handle":handle,"avatarUrl":author["avatar"].as_str()},"text":record["text"].as_str().unwrap_or(""),"createdAt":record["createdAt"].as_str().unwrap_or(""),"media":media,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"BLUESKY"}],"metrics":{"replies":post["replyCount"],"reposts":post["repostCount"],"likes":post["likeCount"]},"capabilities":{"openOriginal":true,"reply":false,"like":false,"repost":false}})) }).collect::<Vec<_>>();
-        Ok(serde_json::json!({"posts":posts,"cursor":native["cursor"].as_str()}))
+        let page = self.home_feed_page(cursor).await?;
+        let posts = page
+            .posts
+            .into_iter()
+            .map(|post| crate::providers::legacy_post(post, account_id, account_handle))
+            .collect::<Vec<_>>();
+        Ok(serde_json::json!({"posts": posts, "cursor": page.cursor}))
     }
     async fn discovery(
         &self,

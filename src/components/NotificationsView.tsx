@@ -1,6 +1,8 @@
 import { Bell, Heart, MessageCircle, Repeat2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAdaptiveRailExpansion } from "../hooks/useAdaptiveRailExpansion";
 import { socialApi } from "../services/desktop/social";
+import { boundNotificationPages } from "../services/social/retention";
 import type { WorkspaceState } from "../types";
 import type { NotificationItem, NotificationPage } from "../types/social";
 import { Notice, ProviderIcon } from "./ui";
@@ -35,9 +37,12 @@ const mergeNotifications = (existing: readonly NotificationItem[], incoming: rea
   return [...merged.values()];
 };
 
+/** Loads account notifications while active and supports filters and read state. */
 export function NotificationsView({ workspace, active, onPost, onProfile }: NotificationProps) {
   const [pages, setPages] = useState<Readonly<Record<string, NotificationPage>>>({});
   const [filter, setFilter] = useState<NotificationFilter>("ALL");
+  const railRef = useRef<HTMLDivElement>(null);
+  const feedExpanded = useAdaptiveRailExpansion(railRef);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -70,7 +75,7 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
       try { return { accountId: account.id, page: await socialApi.notifications(account.id, null, { refresh: force }), error: null }; }
       catch (cause) { return { accountId: account.id, page: null, error: cause instanceof Error ? cause.message : String(cause) }; }
     }));
-    setPages(currentPages => Object.fromEntries(results.map(result => { const previous = currentPages[result.accountId]; return [result.accountId, result.page ? { cursor: previous ? previous.cursor : result.page.cursor, notifications: mergeNotifications(previous?.notifications ?? [], result.page.notifications) } : previous ?? { notifications: [], cursor: null }]; })));
+    setPages(currentPages => boundNotificationPages(Object.fromEntries(results.map(result => { const previous = currentPages[result.accountId]; return [result.accountId, result.page ? { cursor: previous ? previous.cursor : result.page.cursor, notifications: mergeNotifications(previous?.notifications ?? [], result.page.notifications) } : previous ?? { notifications: [], cursor: null }]; }))));
     const failures = results.filter(result => result.error).map(result => `${workspace.accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
     failureCount.current = failures.length > 0 ? failureCount.current + 1 : 0;
     setError(failures.length ? failures.join(" · ") : null);
@@ -131,7 +136,7 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
     setPages(current => {
       const next = { ...current };
       for (const result of results) if (result.page) next[result.accountId] = { cursor: result.page.cursor, notifications: mergeNotifications(current[result.accountId]?.notifications ?? [], result.page.notifications) };
-      return next;
+      return boundNotificationPages(next);
     });
     const failures = results.filter(result => result.error).map(result => `${workspace.accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
     setError(failures.length ? failures.join(" · ") : null);
@@ -139,5 +144,5 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
     inFlight.current = false;
     schedule();
   };
-  return <div className="unified-page"><ViewHeader icon={<Bell />} title="Notifications" subtitle="Activity for your connected accounts." controls={<button className="button" disabled={!notifications.some(item => item.item.unread)} onClick={() => void markRead()}>Mark all read</button>} /><div className="unified-layout"><section className="panel notification-panel"><div className="tabs">{(["ALL", "MENTIONS", "INTERACTIONS"] as const).map(value => <button className={`button ${filter === value ? "selected" : ""}`} key={value} onClick={() => setFilter(value)}>{value === "ALL" ? "All" : value === "MENTIONS" ? "Mentions" : "Interactions"}</button>)}</div>{error && <Notice error>{error}</Notice>}{loading && notifications.length === 0 && <div className="post-skeletons" aria-label="Loading notifications"><i /><i /></div>}{visible.map(({ accountId, item }) => { const account = workspace.accounts.find(account => account.id === accountId); return <button className={`notification-row click-row ${item.unread ? "unread" : ""}`} key={`${accountId}:${item.id}`} onClick={() => item.post ? onPost(accountId, item.post.remoteId) : onProfile(accountId, item.actor.id)}>{icon(item.kind)}<div><strong>{item.actor.displayName} · {item.kind.toLocaleLowerCase()}</strong>{item.post && <p>{item.post.text}</p>}<small className="muted">Via {account?.displayName ?? accountId} · {account && <><ProviderIcon provider={account.provider} /> {account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} · </>}<time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></small></div>{item.unread && <span className="unread-dot" aria-label="Unread" />}</button>; })}{!loading && visible.length === 0 && <div className="empty-state"><Bell /><h3>No notifications in this view</h3><p>New provider activity will appear here.</p></div>}{Object.values(pages).some(page => page.cursor) && <button className="button load-more" disabled={loading} onClick={() => void more()}>{loading ? "Loading…" : "Load more"}</button>}</section><aside className="details-column"><section className="panel"><h2>Notification scope</h2><p className="aside-copy section-space">Activity is grouped from all connected accounts. Opening an item keeps the receiving account as the action identity.</p>{workspace.accounts.map(account => <div className="actor-row" key={account.id}><ProviderIcon provider={account.provider} /><span><strong>{account.displayName}</strong><small>@{account.handle}</small></span></div>)}</section></aside></div></div>;
+  return <div className="unified-page"><ViewHeader icon={<Bell />} title="Notifications" subtitle="Activity for your connected accounts." controls={<button className="button" disabled={!notifications.some(item => item.item.unread)} onClick={() => void markRead()}>Mark all read</button>} /><div className={`unified-layout adaptive-layout ${feedExpanded ? "adaptive-expanded" : ""}`}><section className="panel notification-panel adaptive-main"><div className="tabs">{(["ALL", "MENTIONS", "INTERACTIONS"] as const).map(value => <button className={`button ${filter === value ? "selected" : ""}`} key={value} onClick={() => setFilter(value)}>{value === "ALL" ? "All" : value === "MENTIONS" ? "Mentions" : "Interactions"}</button>)}</div>{error && <Notice error>{error}</Notice>}{loading && notifications.length === 0 && <div className="post-skeletons" aria-label="Loading notifications"><i /><i /></div>}{visible.map(({ accountId, item }) => { const account = workspace.accounts.find(account => account.id === accountId); return <button className={`notification-row click-row ${item.unread ? "unread" : ""}`} key={`${accountId}:${item.id}`} onClick={() => item.post ? onPost(accountId, item.post.remoteId) : onProfile(accountId, item.actor.id)}>{icon(item.kind)}<div><strong>{item.actor.displayName} · {item.kind.toLocaleLowerCase()}</strong>{item.post && <p>{item.post.contentWarning?.trim() ? "Content warning: " + item.post.contentWarning : item.post.text}</p>}<small className="muted">Via {account?.displayName ?? accountId} · {account && <><ProviderIcon provider={account.provider} /> {account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} · </>}<time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></small></div>{item.unread && <span className="unread-dot" aria-label="Unread" />}</button>; })}{!loading && visible.length === 0 && <div className="empty-state"><Bell /><h3>No notifications in this view</h3><p>New provider activity will appear here.</p></div>}{Object.values(pages).some(page => page.cursor) && <button className="button load-more" disabled={loading} onClick={() => void more()}>{loading ? "Loading…" : "Load more"}</button>}</section><aside inert={feedExpanded} className="details-column adaptive-rail"><div ref={railRef} className="adaptive-rail-content"><section className="panel"><h2>Notification scope</h2><p className="aside-copy section-space">Activity is grouped from all connected accounts. Opening an item keeps the receiving account as the action identity.</p>{workspace.accounts.map(account => <div className="actor-row" key={account.id}><ProviderIcon provider={account.provider} /><span><strong>{account.displayName}</strong><small>@{account.handle}</small></span></div>)}</section></div></aside></div></div>;
 }

@@ -1,3 +1,6 @@
+//! Checks batched notification subject lookup and preservation of inbox events
+//! when related posts are absent or fail to load.
+
 use super::{bluesky::BlueskyProvider, SocialProvider};
 use std::{
     io::{BufRead, BufReader, Write},

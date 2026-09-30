@@ -40,13 +40,18 @@ const CALLBACK_PATH: &str = "/oauth/callback";
 const MAX_HTTP_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
+/// Account identifier and callback settings for a Bluesky browser login.
 pub struct BlueskyLoginRequest {
+    /// Handle or DID used to discover the user's authorization server.
     pub identifier: String,
+    /// Published client metadata URL for hosted native login; absent for localhost login.
     pub metadata_url: Option<String>,
+    /// Maximum time to wait for the browser callback.
     pub timeout: Duration,
 }
 
 impl BlueskyLoginRequest {
+    /// Creates a login request using the default callback timeout.
     pub fn new(identifier: String, metadata_url: Option<String>) -> Self {
         Self {
             identifier,
@@ -58,28 +63,41 @@ impl BlueskyLoginRequest {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Serializable Bluesky OAuth session and client settings for later restoration.
 pub struct BlueskyOAuthCredential {
+    /// DID authenticated by this session.
     pub(crate) subject: Did,
+    /// Provider session, including tokens needed for refresh.
     pub(crate) session: Session,
+    /// Client metadata needed to reconstruct the same OAuth client mode.
     pub(crate) client: StoredClientConfig,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "SCREAMING_SNAKE_CASE")]
+/// Client configuration retained alongside a Bluesky OAuth session.
 pub enum StoredClientConfig {
+    /// Loopback client with the redirect URI used during authorization.
     Localhost { redirect_uri: String },
+    /// Hosted native client with its validated published metadata.
     Hosted { metadata: HostedClientDocument },
 }
 
 impl BlueskyOAuthCredential {
+    /// Returns the authenticated account DID.
     pub fn did(&self) -> &str {
         self.subject.as_ref()
     }
 
+    /// Reconstructs an OAuth runtime from the stored session without a credential store.
+    ///
+    /// The runtime can refresh its in-memory session, but persistence requires
+    /// `restore_with_persistence`.
     pub async fn restore(self) -> Result<BlueskyOAuthRuntime, OAuthError> {
         self.restore_with_persistence(None).await
     }
 
+    /// Restores the session and optionally persists refreshed credentials after requests.
     pub(crate) async fn restore_with_persistence(
         self,
         persistence: Option<Arc<dyn CredentialStore>>,
@@ -112,6 +130,7 @@ impl BlueskyOAuthCredential {
     }
 }
 
+/// Completes Bluesky OAuth using a loopback callback and the system browser.
 pub async fn login_localhost(
     request: BlueskyLoginRequest,
     cancel: CancellationToken,
@@ -119,6 +138,10 @@ pub async fn login_localhost(
     login_localhost_with_browser(request, cancel, &SystemBrowser).await
 }
 
+/// Completes loopback login using a caller-provided browser opener.
+///
+/// Hosted metadata is rejected for this mode. Callback state is validated by
+/// the OAuth client during the code exchange.
 pub async fn login_localhost_with_browser(
     request: BlueskyLoginRequest,
     cancel: CancellationToken,
@@ -145,6 +168,7 @@ pub async fn login_localhost_with_browser(
     .await
 }
 
+/// Completes hosted native login using a deep-link receiver and system browser.
 pub async fn login_hosted(
     request: BlueskyLoginRequest,
     callback: oneshot::Receiver<String>,
@@ -153,6 +177,10 @@ pub async fn login_hosted(
     login_hosted_with_browser(request, callback, cancel, &SystemBrowser).await
 }
 
+/// Completes hosted native login using a caller-provided browser opener.
+///
+/// Fetches and validates published metadata, then checks the deep-link redirect
+/// before the OAuth client exchanges its code. The wait can time out or be cancelled.
 pub async fn login_hosted_with_browser(
     request: BlueskyLoginRequest,
     callback: oneshot::Receiver<String>,
@@ -268,6 +296,7 @@ type Client = OAuthClient<
 type SessionClient =
     OAuthSession<HardenedHttpClient, DidResolver, HandleResolver, MemorySessionStore>;
 
+/// Authenticated Bluesky client whose session may be persisted after each request.
 pub struct BlueskyOAuthRuntime {
     session: SessionClient,
     subject: Did,
@@ -277,14 +306,20 @@ pub struct BlueskyOAuthRuntime {
 }
 
 impl BlueskyOAuthRuntime {
+    /// Returns the DID authenticated by this runtime.
     pub fn subject(&self) -> &str {
         self.subject.as_ref()
     }
 
+    /// Returns the session's current personal data server base URI.
     pub fn service_url(&self) -> String {
         self.session.base_uri()
     }
 
+    /// Sends an authenticated GET XRPC request and decodes its JSON response.
+    ///
+    /// `path` is relative to the server's `xrpc/` endpoint. A configured
+    /// credential store receives the current session after the request attempt.
     pub async fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -300,6 +335,7 @@ impl BlueskyOAuthRuntime {
         .await
     }
 
+    /// Sends an authenticated JSON POST to `xrpc/{path}` and decodes JSON.
     pub async fn post_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -317,6 +353,7 @@ impl BlueskyOAuthRuntime {
         .await
     }
 
+    /// Sends an authenticated POST body with the supplied MIME type and decodes JSON.
     pub async fn post_bytes<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -550,6 +587,7 @@ async fn finish(
 }
 
 #[derive(Clone)]
+/// XRPC transport that pins public destinations and bounds response size.
 struct HardenedHttpClient;
 
 impl HardenedHttpClient {
@@ -585,6 +623,7 @@ impl HttpClient for HardenedHttpClient {
 }
 
 #[derive(Clone, Copy)]
+/// Disables DNS TXT handle resolution in favor of HTTP handle resolution.
 struct NoDnsResolver;
 
 impl DnsTxtResolver for NoDnsResolver {

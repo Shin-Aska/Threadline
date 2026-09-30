@@ -1,20 +1,24 @@
+//! Hashtag lookup DTOs, query validation, and provider response handling.
 use crate::{error::AppError, AppState};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// A suggested hashtag and its provider-specific activity information.
 pub struct HashtagSuggestion {
     pub name: String,
     pub activity: HashtagActivity,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "SCREAMING_SNAKE_CASE")]
+/// Provider-specific activity reported for a hashtag suggestion.
 pub enum HashtagActivity {
     Mastodon { uses: u64, days: usize },
     Bluesky { matches: Option<u64> },
     Unavailable,
 }
+/// Accepts up to 64 Unicode letters, marks, digits, or underscores.
 pub fn valid_query(query: &str) -> bool {
     static PATTERN: std::sync::LazyLock<Result<regex::Regex, regex::Error>> =
         std::sync::LazyLock::new(|| regex::Regex::new(r"^[\p{L}\p{M}\p{N}_]*$"));
@@ -24,6 +28,7 @@ pub fn valid_query(query: &str) -> bool {
             .is_ok_and(|pattern| pattern.is_match(query))
 }
 #[tauri::command]
+/// Looks up hashtags through the account's connected provider after validating the query.
 pub async fn lookup_hashtags(
     account_id: String,
     query: String,
@@ -43,6 +48,7 @@ pub async fn lookup_hashtags(
         .ok_or_else(|| AppError::Provider("Reconnect this account to look up hashtags".into()))?;
     provider.hashtags(&query).await
 }
+/// Sends a hashtag request with a 12-second timeout and decodes successful JSON.
 pub async fn response<T: for<'de> Deserialize<'de>>(
     request: reqwest::RequestBuilder,
 ) -> Result<T, AppError> {

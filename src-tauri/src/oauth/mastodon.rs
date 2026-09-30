@@ -1,3 +1,5 @@
+//! Mastodon authorization-code login with PKCE and a one-shot loopback callback.
+
 use super::{
     browser::{BrowserOpener, SystemBrowser},
     callback::LoopbackCallback,
@@ -16,12 +18,16 @@ const CALLBACK_PATH: &str = "/oauth/callback";
 const SCOPES: &str = "read:accounts write:statuses write:media";
 
 #[derive(Debug, Clone)]
+/// Input and callback deadline for a Mastodon browser login.
 pub struct MastodonLoginRequest {
+    /// Instance URL, normalized to a credential-free HTTPS origin during login.
     pub instance_url: String,
+    /// Maximum time to wait for the browser callback.
     pub timeout: Duration,
 }
 
 impl MastodonLoginRequest {
+    /// Creates a request using the default login timeout.
     pub fn new(instance_url: String) -> Self {
         Self {
             instance_url,
@@ -32,43 +38,58 @@ impl MastodonLoginRequest {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Verified Mastodon identity and bearer token returned by login.
 pub struct MastodonOAuthCredential {
+    /// Normalized HTTPS instance origin.
     pub(crate) base_url: String,
+    /// Access token granted by the instance.
     pub(crate) access_token: String,
+    /// Provider account ID from credential verification.
     pub(crate) remote_id: String,
+    /// Account handle from credential verification.
     pub(crate) handle: String,
+    /// Display name from credential verification.
     pub(crate) display_name: String,
 }
 
 impl MastodonOAuthCredential {
+    /// Borrows the verified account ID, handle, and display name, in that order.
     pub fn account_identity(&self) -> (&str, &str, &str) {
         (&self.remote_id, &self.handle, &self.display_name)
     }
 
+    /// Consumes the credential and returns the instance origin and access token.
     pub fn into_provider_secret(self) -> (String, String) {
         (self.base_url, self.access_token)
     }
 }
 
 #[derive(Deserialize)]
+/// OAuth application credentials returned by instance registration.
 struct AppRegistration {
     client_id: String,
     client_secret: Option<String>,
 }
 
 #[derive(Deserialize)]
+/// Access token and optional granted scopes returned by the token endpoint.
 struct TokenResponse {
     access_token: String,
     scope: Option<String>,
 }
 
 #[derive(Deserialize)]
+/// Account identity returned by `verify_credentials`.
 struct VerifiedAccount {
     id: String,
     acct: String,
     display_name: String,
 }
 
+/// Completes Mastodon browser login using the system browser.
+///
+/// Registers a client, verifies callback state, exchanges the code, and fetches
+/// the account identity before returning credentials.
 pub async fn login(
     request: MastodonLoginRequest,
     cancel: CancellationToken,
@@ -76,6 +97,9 @@ pub async fn login(
     login_with_browser(request, cancel, &SystemBrowser).await
 }
 
+/// Completes Mastodon login using a caller-provided browser opener.
+///
+/// This entry point has the same registration and validation behavior as [`login`].
 pub async fn login_with_browser(
     request: MastodonLoginRequest,
     cancel: CancellationToken,

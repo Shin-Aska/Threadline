@@ -1,3 +1,5 @@
+//! Looks up Bluesky hashtag activity through post search.
+
 use super::BlueskyProvider;
 use crate::{
     error::AppError,
@@ -5,12 +7,14 @@ use crate::{
 };
 use serde::Deserialize;
 use std::time::Duration;
+/// Post search response carrying an optional total hit count.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Search {
     hits_total: Option<u64>,
 }
 impl BlueskyProvider {
+    /// Searches posts for a tag and preserves an unknown hit count when Bluesky omits it.
     pub(super) async fn search_hashtags(
         &self,
         query: &str,

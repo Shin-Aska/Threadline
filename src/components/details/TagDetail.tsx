@@ -10,6 +10,7 @@ import type { DetailTarget } from "./SocialDetailView";
 import { DetailHeader } from "./DetailHeader";
 
 interface TagProps { readonly target: Extract<DetailTarget, { readonly kind: "TAG" }>; readonly workspace: WorkspaceState; readonly onBack: () => void; readonly onPost: (accountId: string, postId: string) => void; readonly onProfile: (accountId: string, profileId: string) => void; readonly onTag: (accountId: string, tag: string) => void }
+/** Displays the selected account's feed for one tag with standard feed controls. */
 export function TagDetail(props: TagProps) {
   const account = props.workspace.accounts.find(account => account.id === props.target.accountId);
   const feed = useSocialFeed(account ? [account] : [], { kind: "TAG", tag: props.target.id });

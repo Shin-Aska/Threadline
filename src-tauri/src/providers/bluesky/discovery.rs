@@ -1,8 +1,11 @@
+//! Builds Bluesky discovery topics and account suggestions from App View endpoints.
+
 use crate::error::AppError;
 
 use super::{native, normalize, BlueskyProvider};
 
 impl BlueskyProvider {
+    /// Returns trending topics and suggested actors in the shared discovery payload.
     pub(super) async fn discovery_result(
         &self,
         account_id: &str,

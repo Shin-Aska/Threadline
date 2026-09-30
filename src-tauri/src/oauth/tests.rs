@@ -1,3 +1,5 @@
+//! Contract tests for callback validation, hosted metadata, and flow cancellation.
+
 use super::{
     callback::{parse_callback_target, CallbackPayload, LoopbackCallback},
     config::{BlueskyClientMode, HostedClientDocument},

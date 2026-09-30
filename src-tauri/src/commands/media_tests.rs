@@ -1,9 +1,12 @@
+//! Publication scenarios cover first-segment media and image-only previews.
 use super::*;
 use crate::providers::SocialProvider;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use std::sync::{Mutex, RwLock};
+/// Records posts submitted during a threaded publication.
 struct RecordingProvider(Mutex<Vec<PreparedPost>>);
+/// Credential store unused by the media publication scenarios.
 struct UnusedCredentials;
 impl crate::credentials::CredentialStore for UnusedCredentials {
     fn set(&self, _: &str, _: &str) -> Result<(), AppError> {

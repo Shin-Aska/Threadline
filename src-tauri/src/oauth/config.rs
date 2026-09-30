@@ -1,3 +1,5 @@
+//! Bluesky client metadata construction and hosted metadata validation.
+
 use super::OAuthError;
 use atrium_oauth::{
     AtprotoClientMetadata, AtprotoLocalhostClientMetadata, AuthMethod, GrantType, KnownScope, Scope,
@@ -6,24 +8,37 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Debug, Clone)]
+/// Metadata used to initialize either loopback or hosted Bluesky OAuth.
 pub enum BlueskyClientMode {
+    /// Per-login localhost metadata with a loopback redirect URI.
     Localhost(AtprotoLocalhostClientMetadata),
+    /// Published native client metadata validated before use.
     Hosted(AtprotoClientMetadata),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Fields read from a published Bluesky native OAuth client document.
 pub struct HostedClientDocument {
+    /// Public HTTPS metadata URL, also used as the client identifier.
     pub client_id: String,
+    /// OAuth application type; hosted login requires `native`.
     pub application_type: String,
+    /// Advertised grants; authorization code and refresh token are required.
     pub grant_types: Vec<String>,
+    /// Space-separated scopes advertised by the client.
     pub scope: String,
+    /// Advertised response types; `code` is required.
     pub response_types: Vec<String>,
+    /// Native callback URIs; the first is used for login.
     pub redirect_uris: Vec<String>,
+    /// Whether issued access tokens are bound to a DPoP key.
     pub dpop_bound_access_tokens: bool,
+    /// Token endpoint authentication method; public clients require `none`.
     pub token_endpoint_auth_method: Option<String>,
 }
 
 impl BlueskyClientMode {
+    /// Builds localhost metadata with the requested redirect and default scopes.
     pub fn localhost(redirect_uri: String) -> Self {
         Self::Localhost(AtprotoLocalhostClientMetadata {
             redirect_uris: Some(vec![redirect_uri]),
@@ -31,6 +46,10 @@ impl BlueskyClientMode {
         })
     }
 
+    /// Validates a published native client document and converts it to OAuth metadata.
+    ///
+    /// The document must match its HTTPS URL, permit authorization and refresh, require
+    /// DPoP, and provide the scopes and native redirect needed by Threadline.
     pub fn from_hosted_document(
         metadata_url: &str,
         document: HostedClientDocument,
@@ -105,6 +124,7 @@ fn default_scopes() -> Vec<Scope> {
     ]
 }
 
+/// Parses a public HTTPS metadata URL without credentials, a port, or a fragment.
 pub(crate) fn validate_hosted_metadata_url(raw: &str) -> Result<Url, OAuthError> {
     let url = Url::parse(raw)
         .map_err(|_| OAuthError::InvalidMetadata("client metadata URL is malformed".into()))?;

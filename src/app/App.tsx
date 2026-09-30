@@ -6,6 +6,7 @@ import { FollowingView } from "../components/FollowingView";
 import { MyProfilesView } from "../components/MyProfilesView";
 import { NotificationsView } from "../components/NotificationsView";
 import { PublishingWorkspace } from "../components/PublishingWorkspace";
+import { SettingsView } from "../components/SettingsView";
 import { SocialDetailView } from "../components/details/SocialDetailView";
 import { TimelineView } from "../components/TimelineView";
 import { Notice } from "../components/ui";
@@ -13,8 +14,9 @@ import { useWorkspace } from "../hooks/useWorkspace";
 import { useWorkspaceNavigation } from "../hooks/useWorkspaceNavigation";
 import { invalidateSocialReadCache } from "../services/desktop/social";
 
-const titles: Readonly<Record<Page, string>> = { notifications: "Notifications", myprofiles: "My profiles", timeline: "Timeline", discover: "Discover", following: "Following", composer: "Composer", accounts: "Accounts & Sync" };
+const titles: Readonly<Record<Page, string>> = { notifications: "Notifications", myprofiles: "My profiles", timeline: "Timeline", discover: "Discover", following: "Following", composer: "Composer", accounts: "Accounts & Sync", settings: "Settings" };
 
+/** Root workspace composition and navigation state for the React application. */
 export function App() {
   const navigation = useWorkspaceNavigation();
   const [visited, setVisited] = useState<ReadonlySet<Page>>(() => new Set(["timeline"]));
@@ -39,5 +41,6 @@ export function App() {
     {visited.has("following") && <div hidden={navigation.detail !== null || navigation.page !== "following"}><FollowingView {...pageProps} onSource={(accountId, source) => navigation.openDetail({ kind: "SOURCE", accountId, source, origin: "Following" })} /></div>}
     {visited.has("composer") && <div hidden={navigation.detail !== null || navigation.page !== "composer"}><PublishingWorkspace workspace={workspace} refreshing={refreshing || error !== null} onAccounts={() => navigation.navigate("accounts")} /></div>}
     {visited.has("accounts") && <div hidden={navigation.detail !== null || navigation.page !== "accounts"}><AccountsPanel workspace={workspace} refreshing={refreshing || error !== null} onConnected={async account => { invalidateSocialReadCache(account.id); await refresh(account.id); }} onRemoved={async () => { invalidateSocialReadCache(); await refresh(); }} /></div>}
+    {visited.has("settings") && <div hidden={navigation.detail !== null || navigation.page !== "settings"}><SettingsView /></div>}
   </AppShell>;
 }

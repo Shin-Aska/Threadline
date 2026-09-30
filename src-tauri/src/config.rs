@@ -1,3 +1,8 @@
+//! Construct provider transports from stored or opt-in environment credentials.
+//!
+//! The provider map is keyed by Threadline account ID. Credential values are
+//! passed to transports and kept out of serializable account records.
+
 use crate::{
     credentials::CredentialStore,
     models::{Account, CountingPolicy, PlatformCapabilities, ProviderKind},
@@ -7,27 +12,39 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, sync::Arc};
 
+/// Live provider transports indexed by the owning account's ID.
 pub type ProviderMap = HashMap<String, Arc<dyn SocialProvider>>;
 
+/// Credential format detected while restoring a stored account.
 enum ParsedCredential {
     BlueskyOAuth(Box<BlueskyOAuthCredential>),
     Legacy(StoredCredential),
 }
 
+/// Stored credential payloads for app-password Bluesky and Mastodon accounts.
+///
+/// The tagged provider variant determines which transport is constructed;
+/// secrets stay in credential storage rather than the account record.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "provider", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum StoredCredential {
+    /// Bluesky account authenticated with an app password.
     Bluesky {
         service_url: String,
         identifier: String,
         app_password: String,
     },
+    /// Mastodon account authenticated with a bearer access token.
     Mastodon {
         base_url: String,
         access_token: String,
     },
 }
 
+/// Restores a provider from encoded credentials without persistence callbacks.
+///
+/// Returns `None` when the payload or HTTP client cannot be constructed, or
+/// when an OAuth credential cannot be restored.
 pub async fn provider_from_credential(
     account: &Account,
     encoded: &str,
@@ -35,6 +52,10 @@ pub async fn provider_from_credential(
     provider_from_credential_with_persistence(account, encoded, None).await
 }
 
+/// Restores a provider and optionally retains access to credential persistence.
+///
+/// Bluesky OAuth uses persistence for refreshed credentials. Legacy Bluesky
+/// app-password and Mastodon token accounts use their stored secret directly.
 pub async fn provider_from_credential_with_persistence(
     account: &Account,
     encoded: &str,

@@ -1,21 +1,38 @@
+//! Provides a local HTTP fixture that records provider requests in response order.
+
 use std::{
     io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
     time::{Duration, Instant},
 };
+/// Request headers and body captured by the local fixture server.
 pub(super) struct Request {
+    /// Raw request headers, including the request line.
     pub headers: String,
+    /// Exact request body bytes read using Content-Length.
     pub body: Vec<u8>,
 }
+/// Serves the supplied responses in order and returns every captured request.
 pub(super) fn server(
     responses: Vec<(u16, &'static str)>,
+) -> (String, std::thread::JoinHandle<Vec<Request>>) {
+    server_with_headers(
+        responses
+            .into_iter()
+            .map(|(status, body)| (status, body, ""))
+            .collect(),
+    )
+}
+
+pub(super) fn server_with_headers(
+    responses: Vec<(u16, &'static str, &'static str)>,
 ) -> (String, std::thread::JoinHandle<Vec<Request>>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
     listener.set_nonblocking(true).expect("nonblocking");
     let url = format!("http://{}", listener.local_addr().expect("address"));
     let task = std::thread::spawn(move || {
         let mut requests = Vec::new();
-        for (status, body) in responses {
+        for (status, body, extra_headers) in responses {
             let deadline = Instant::now() + Duration::from_secs(5);
             let socket = loop {
                 if let Ok((socket, _)) = listener.accept() {
@@ -50,7 +67,7 @@ pub(super) fn server(
                 headers,
                 body: request_body,
             });
-            write!(reader.get_mut(), "HTTP/1.1 {status} Response\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).expect("response");
+            write!(reader.get_mut(), "HTTP/1.1 {status} Response\r\n{extra_headers}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).expect("response");
         }
         requests
     });

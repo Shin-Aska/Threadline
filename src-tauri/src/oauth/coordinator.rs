@@ -1,3 +1,5 @@
+//! Tracks active OAuth flows and routes cancellation and native deep links.
+
 use super::OAuthError;
 use std::{
     collections::HashMap,
@@ -7,23 +9,31 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Default)]
+/// Shared registry of active login flows, keyed by renderer-generated UUIDs.
 pub struct OAuthCoordinator {
     inner: Arc<Mutex<HashMap<String, ActiveFlow>>>,
 }
 
+/// Cancellation handle and optional one-shot deep-link sender for a registered flow.
 struct ActiveFlow {
     cancel: CancellationToken,
     deep_link: Option<oneshot::Sender<String>>,
 }
 
+/// Active login registration removed from its coordinator when dropped.
 pub struct OAuthFlow {
     flow_id: String,
     coordinator: OAuthCoordinator,
+    /// Token observed by the login task to stop waiting for authorization.
     pub cancel: CancellationToken,
+    /// Receives one native callback URL for a hosted Bluesky login, when configured.
     pub deep_link: Option<oneshot::Receiver<String>>,
 }
 
 impl OAuthCoordinator {
+    /// Registers a UUID flow and optionally creates a native callback receiver.
+    ///
+    /// Returns an error if the ID is invalid, already active, or the registry is unavailable.
     pub fn start(&self, flow_id: &str, expects_deep_link: bool) -> Result<OAuthFlow, OAuthError> {
         if uuid::Uuid::parse_str(flow_id).is_err() {
             return Err(OAuthError::Configuration("OAuth flow ID is invalid".into()));
@@ -59,6 +69,9 @@ impl OAuthCoordinator {
         })
     }
 
+    /// Signals cancellation for the named active flow.
+    ///
+    /// Returns an error when no such flow exists or the registry is unavailable.
     pub fn cancel(&self, flow_id: &str) -> Result<(), OAuthError> {
         let flows = self
             .inner
@@ -71,6 +84,9 @@ impl OAuthCoordinator {
         Ok(())
     }
 
+    /// Sends a callback URL to the sole flow awaiting a native deep link.
+    ///
+    /// Returns a conflict when multiple flows await a link, or an error if none can receive it.
     pub fn deliver_deep_link(&self, url: String) -> Result<(), OAuthError> {
         let mut flows = self
             .inner
