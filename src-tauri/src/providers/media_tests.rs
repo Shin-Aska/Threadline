@@ -81,7 +81,10 @@ async fn mastodon_waits_for_processing_and_attaches_media_ids() {
             200,
             r#"{"id":"media-1","url":"https://test.invalid/image.png"}"#,
         ),
-        (200, r#"{"id":"post-1"}"#),
+        (
+            200,
+            r#"{"id":"post-1","created_at":"2026-09-20T01:00:00Z","content":"<p>Published</p>","account":{"id":"7","acct":"me"}}"#,
+        ),
     ]);
     let provider = MastodonProvider {
         capabilities: crate::accounts::mock_accounts()[1].capabilities.clone(),
