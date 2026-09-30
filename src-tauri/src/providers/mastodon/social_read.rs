@@ -27,6 +27,16 @@ impl MastodonProvider {
         request: reqwest::RequestBuilder,
         label: &str,
     ) -> Result<T, AppError> {
+        self.social_get_with_headers(request, label)
+            .await
+            .map(|(value, _)| value)
+    }
+
+    pub(super) async fn social_get_with_headers<T: serde::de::DeserializeOwned>(
+        &self,
+        request: reqwest::RequestBuilder,
+        label: &str,
+    ) -> Result<(T, reqwest::header::HeaderMap), AppError> {
         let response = request
             .bearer_auth(&self.access_token)
             .timeout(std::time::Duration::from_secs(60))
@@ -34,6 +44,7 @@ impl MastodonProvider {
             .await
             .map_err(|error| AppError::Provider(format!("Mastodon {label} failed: {error}")))?;
         let status = response.status();
+        let headers = response.headers().clone();
         let body = response.text().await.map_err(|error| {
             AppError::Provider(format!(
                 "Mastodon {label} response could not be read: {error}"
@@ -46,6 +57,7 @@ impl MastodonProvider {
             )));
         }
         serde_json::from_str(&body)
+            .map(|value| (value, headers))
             .map_err(|error| AppError::Provider(format!("Invalid Mastodon {label}: {error}")))
     }
 
@@ -111,6 +123,7 @@ impl MastodonProvider {
             request = request.query(&[("max_id", cursor)]);
         }
         let statuses: Vec<native::Status> = self.social_get(request, "profile feed").await?;
+        let cursor = statuses.last().map(|status| status.id.clone());
         let statuses = match kind {
             ProfileFeedKind::Replies => statuses
                 .into_iter()
@@ -118,7 +131,9 @@ impl MastodonProvider {
                 .collect(),
             ProfileFeedKind::Posts | ProfileFeedKind::Media => statuses,
         };
-        self.status_page(statuses)
+        let mut page = self.status_page(statuses)?;
+        page.cursor = cursor;
+        Ok(page)
     }
 
     /// Resolves the connected account before loading its status feed.
