@@ -106,6 +106,8 @@ pub struct SocialPost {
     pub remote_url: String,
     pub author: Actor,
     pub text: String,
+    pub content_warning: Option<String>,
+    pub sensitive: bool,
     pub created_at: String,
     pub media: Vec<Media>,
     pub metrics: PostMetrics,
@@ -125,6 +127,8 @@ pub struct Media {
     pub url: String,
     pub alt: String,
     pub media_type: String,
+    #[serde(default)]
+    pub thumbnail: Option<String>,
 }
 
 /// A page of normalized posts and a cursor for requesting the next page.
