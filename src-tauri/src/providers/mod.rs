@@ -246,6 +246,7 @@ pub(crate) fn legacy_post(
                 "url": item.url,
                 "alt": item.alt,
                 "type": item.media_type,
+                "thumbnail": item.thumbnail,
             })
         })
         .collect::<Vec<_>>();
@@ -256,6 +257,8 @@ pub(crate) fn legacy_post(
         "remoteUrl": post.remote_url,
         "author": post.author,
         "text": post.text,
+        "contentWarning": post.content_warning,
+        "sensitive": post.sensitive,
         "createdAt": post.created_at,
         "media": media,
         "sources": [{
