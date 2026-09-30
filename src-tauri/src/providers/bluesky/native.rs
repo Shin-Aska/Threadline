@@ -74,10 +74,13 @@ pub(super) struct PostViewer {
     pub repost: Option<String>,
 }
 
-/// Image data exposed by a post embed in the consumed response shape.
 #[derive(Clone, Deserialize)]
 pub(super) struct EmbedView {
     pub images: Option<Vec<ImageView>>,
+    pub playlist: Option<String>,
+    pub thumbnail: Option<String>,
+    pub alt: Option<String>,
+    pub media: Option<Box<EmbedView>>,
 }
 
 /// Full-size image URL and its accessibility text.
