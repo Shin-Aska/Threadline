@@ -22,6 +22,7 @@ const invokeDesktop = <Result>(command: string, args?: Record<string, unknown>):
     ? invoke<Result>(command, args)
     : Promise.reject(new DesktopPublishingUnavailableError());
 
+/** Typed bridge for draft persistence, publication history, and schedule actions. */
 export const publishingApi = {
   drafts: {
     save: (input: SaveDraftInput): Promise<DraftRecord> => invokeDesktop("save_draft", { input }),

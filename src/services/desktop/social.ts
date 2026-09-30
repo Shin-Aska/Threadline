@@ -13,6 +13,7 @@ import type {
 import { readPostCacheLimit, savePostCacheLimit, type PostCacheLimit } from "./post-cache-settings";
 import { invalidateAroundMutation, SocialReadCache } from "./social-cache";
 
+/** Options shared by cached reads, including an explicit bypass of cached data. */
 export interface SocialReadOptions {
   readonly refresh?: boolean | undefined;
 }
@@ -36,6 +37,7 @@ const notificationPostCount = (page: NotificationPage): number => page.notificat
 type SocialActionListener = (accountId: string, action: SocialAction, result: SocialActionResult) => void;
 const actionListeners = new Set<SocialActionListener>();
 
+/** Subscribes to completed social actions and returns an unsubscribe function. */
 export function subscribeSocialActions(listener: SocialActionListener): () => void {
   actionListeners.add(listener);
   return () => { actionListeners.delete(listener); };
@@ -57,19 +59,23 @@ const cachedCall = <T>(request: CachedCall, countPosts?: (value: T) => number): 
 const mutate = <T>(accountId: string, command: string, args: Readonly<Record<string, unknown>>): Promise<T> =>
   invalidateAroundMutation(cache, accountId, () => call<T>(command, args));
 
+/** Invalidates all cached reads or only those owned by one account. */
 export const invalidateSocialReadCache = (accountId?: string): void => {
   if (accountId === undefined) cache.clear();
   else cache.invalidateAccount(accountId);
 };
 
+/** Returns the persisted upper bound for cached post records. */
 export const getPostCacheLimit = (): PostCacheLimit => postCacheLimit;
 
+/** Persists a new post-cache bound and immediately evicts excess cached posts. */
 export const setPostCacheLimit = (limit: PostCacheLimit): void => {
   savePostCacheLimit(limit);
   cache.setMaxPosts(limit);
   postCacheLimit = limit;
 };
 
+/** Typed desktop bridge for cached social reads and account-scoped mutations. */
 export const socialApi = {
   home: (accountId: string, cursor: string | null = null, options?: SocialReadOptions): Promise<FeedPage> =>
     cachedCall<FeedPage>({ accountId, command: "get_home_feed", args: { accountId, cursor }, ttlMs: CONTENT_TTL_MS, options }, feedPostCount),

@@ -1,9 +1,11 @@
+/** Capacity, post-count, and clock settings for a social read cache. */
 export interface SocialReadCacheOptions {
   readonly maxEntries: number;
   readonly maxPosts?: number;
   readonly now?: () => number;
 }
 
+/** One cacheable provider read and the metadata used to expire and bound it. */
 export interface SocialReadRequest<T> {
   readonly accountId: string;
   readonly command: string;
@@ -25,6 +27,7 @@ interface CacheEntry {
  * Keeps reads isolated by acting account; mutations invalidate that account before
  * and after the native call so cached state cannot outlive a mutation attempt.
  */
+/** Caches in-flight and completed reads per account with entry and post-count bounds. */
 export class SocialReadCache {
   readonly #entries = new Map<string, CacheEntry>();
   readonly #maxEntries: number;
@@ -113,6 +116,7 @@ export class SocialReadCache {
   }
 }
 
+/** Clears an account's reads before and after a mutation, including failed attempts. */
 export async function invalidateAroundMutation<T>(cache: SocialReadCache, accountId: string, mutation: () => Promise<T>): Promise<T> {
   cache.invalidateAccount(accountId);
   try {

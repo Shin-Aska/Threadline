@@ -74,6 +74,7 @@ pub(super) struct PostViewer {
     pub repost: Option<String>,
 }
 
+/// Nested media data returned by AT Protocol image or video embed records.
 #[derive(Clone, Deserialize)]
 pub(super) struct EmbedView {
     pub images: Option<Vec<ImageView>>,

@@ -7,6 +7,7 @@ import "../../styles/image-viewer.css";
 type Point = { readonly x: number; readonly y: number };
 type Size = { readonly width: number; readonly height: number };
 
+/** Source image and close handler required by the fullscreen viewer. */
 export type ImageViewerProps = {
   readonly src: string;
   readonly alt: string;
@@ -18,6 +19,7 @@ const MAX_ZOOM = 400;
 const ZOOM_STEP = 25;
 const PAN_STEP = 48;
 
+/** Displays an image in a closable overlay with zoom and pan controls. */
 export function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
   const titleId = useId();
   const descriptionId = useId();

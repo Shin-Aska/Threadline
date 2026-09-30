@@ -7,6 +7,7 @@ type PreviewOutcome = { readonly post: CanonicalPost; readonly revision: number;
   | { readonly status: "error"; readonly error: string }
 );
 
+/** Debounces destination preview requests and exposes only results for current inputs. */
 export function usePostPreview(post: CanonicalPost, workspace: WorkspaceState, enabled: boolean) {
   const [outcome, setOutcome] = useState<PreviewOutcome | null>(null);
   const [revision, setRevision] = useState(0);

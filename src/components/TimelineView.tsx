@@ -18,6 +18,7 @@ interface TimelineProps {
   readonly onTag: (accountId: string, tag: string) => void;
 }
 
+/** Shows a searchable, filterable home feed merged across selected accounts. */
 export function TimelineView({ workspace, onPost, onProfile, onTag }: TimelineProps) {
   const scope = useBrowsingScope("timeline", workspace.accounts);
   const accounts = useMemo(() => workspace.accounts.filter(account => scope.selected.includes(account.id)), [workspace.accounts, scope.selected]);

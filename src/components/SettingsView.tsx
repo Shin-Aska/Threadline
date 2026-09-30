@@ -5,6 +5,7 @@ import { getPostCacheLimit, setPostCacheLimit } from "../services/desktop/social
 import { ExternalLinkWarningSetting } from "./unified/ExternalLinks";
 import { ViewHeader } from "./unified/ViewHeader";
 
+/** Presents local application preferences that do not belong to one provider. */
 export function SettingsView() {
   const [limit, setLimit] = useState(getPostCacheLimit);
   const [error, setError] = useState<string | null>(null);

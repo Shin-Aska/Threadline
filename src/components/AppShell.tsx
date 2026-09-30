@@ -3,6 +3,7 @@ import packageJson from "../../package.json";
 import type { ReactNode } from "react";
 import type { Account, WorkspaceMode } from "../types";
 
+/** Top-level workspace destinations managed by the app shell. */
 export type Page = "notifications" | "myprofiles" | "timeline" | "discover" | "following" | "composer" | "accounts" | "settings";
 interface ShellProps {
   readonly accounts: readonly Account[];
@@ -15,6 +16,7 @@ interface ShellProps {
   readonly onCompose: () => void;
   readonly children: ReactNode;
 }
+/** Shared desktop layout with navigation rails, account status, and active content. */
 export function AppShell({ accounts, connectedAccountIds, page, mode, onNavigate, profileAccountId, onProfileAccount, onCompose, children }: ShellProps) {
   const connectedCount = accounts.filter(account => connectedAccountIds.includes(account.id)).length;
   const connectionSummary = `${connectedCount} connected ${connectedCount === 1 ? "account" : "accounts"}`;

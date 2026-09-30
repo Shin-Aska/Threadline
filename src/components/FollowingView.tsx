@@ -45,6 +45,7 @@ function mergeFeedItems(groups: readonly (readonly SocialFeedItem[])[]): SocialF
 }
 
 interface FollowingProps { readonly workspace: WorkspaceState; readonly onSource: (accountId: string, source: FollowedSource) => void; readonly onPost: (accountId: string, postId: string) => void; readonly onProfile: (accountId: string, profileId: string) => void; readonly onTag: (accountId: string, tag: string) => void }
+/** Combines followed people, tags, lists, and feeds across selected accounts. */
 export function FollowingView(props: FollowingProps) {
   const scope = useBrowsingScope("following", props.workspace.accounts);
   const accounts = useMemo(() => props.workspace.accounts.filter(account => scope.selected.includes(account.id)), [props.workspace.accounts, scope.selected]);

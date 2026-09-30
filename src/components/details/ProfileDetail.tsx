@@ -14,6 +14,7 @@ import type { DetailTarget } from "./SocialDetailView";
 
 interface ProfileProps { readonly target: Extract<DetailTarget, { readonly kind: "PROFILE" }>; readonly workspace: WorkspaceState; readonly onBack: () => void; readonly onPost: (accountId: string, postId: string) => void; readonly onProfile: (accountId: string, profileId: string) => void; readonly onTag: (accountId: string, tag: string) => void }
 const kinds: readonly ProfileFeedKind[] = ["POSTS", "REPLIES", "MEDIA"];
+/** Loads another profile and supports following it and browsing its posts. */
 export function ProfileDetail(props: ProfileProps) {
   const account = props.workspace.accounts.find(account => account.id === props.target.accountId);
   const [kind, setKind] = useState<ProfileFeedKind>("POSTS");

@@ -18,6 +18,7 @@ interface SocialPostProps {
   readonly onTag: (accountId: string, tag: string) => void;
 }
 
+/** Renders a social post with per-account reactions and provider actions. */
 export function SocialPostCard({ item, accounts, onPost, onProfile, onTag }: SocialPostProps) {
   const firstAccount = item.observations[0]?.accountId ?? "";
   const [accountId, setAccountId] = useState(firstAccount);

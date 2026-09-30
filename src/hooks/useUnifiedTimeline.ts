@@ -3,6 +3,7 @@ import type { Account, ProviderFailure, UnifiedFeedPage, UnifiedPost } from "../
 import { getUnifiedTimeline } from "../services/unified";
 import { mergePosts } from "../services/unified/aggregate";
 
+/** Loads and pages the selected accounts' merged timeline, with retry state. */
 export function useUnifiedTimeline(accounts: readonly Account[]) {
   const [posts, setPosts] = useState<UnifiedPost[]>([]); const [pages, setPages] = useState<Record<string, UnifiedFeedPage>>({}); const [failures, setFailures] = useState<readonly ProviderFailure[]>([]); const [loading, setLoading] = useState(true); const [revision, setRevision] = useState(0);
   useEffect(() => { const controller = new AbortController(); setLoading(true); void getUnifiedTimeline(accounts, {}, controller.signal).then(result => { setPosts(result.posts); setPages(result.pages); setFailures(result.failures); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [accounts, revision]);

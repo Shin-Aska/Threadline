@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Provider } from "../types";
 
+/** Persists per-view account filters and exposes provider-wide selection controls. */
 export function useBrowsingScope(view: string, accounts: readonly Account[]) {
   const key = `threadline:browsing-scope:${view}`;
   const available = useMemo(() => new Set(accounts.map(account => account.id)), [accounts]);

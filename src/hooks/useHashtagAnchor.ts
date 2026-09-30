@@ -2,6 +2,7 @@ import { useLayoutEffect, useState } from "react";
 import type { RefObject } from "react";
 
 const metrics = ["fontFamily", "fontSize", "fontWeight", "fontStyle", "fontVariant", "letterSpacing", "lineHeight", "textIndent", "textTransform", "tabSize", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth", "boxSizing"] as const;
+/** Positions the suggestion popup at a textarea character and keeps it in view. */
 export function useHashtagAnchor(editor: RefObject<HTMLTextAreaElement | null>, popup: RefObject<HTMLDivElement | null>, text: string, index: number) {
   const [position, setPosition] = useState({ left: 8, top: 8, width: 360, maxHeight: 400, visible: false });
   useLayoutEffect(() => {

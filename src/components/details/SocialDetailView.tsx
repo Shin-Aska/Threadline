@@ -5,6 +5,7 @@ import { SourceDetail } from "./SourceDetail";
 import { TagDetail } from "./TagDetail";
 import { ThreadDetail } from "./ThreadDetail";
 
+/** Route payload for the selected profile, post, tag, or followed source. */
 export type DetailTarget =
   | { readonly kind: "PROFILE"; readonly accountId: string; readonly id: string; readonly origin: string }
   | { readonly kind: "POST"; readonly accountId: string; readonly id: string; readonly origin: string }
@@ -20,6 +21,7 @@ interface DetailProps {
   readonly onTag: (accountId: string, tag: string) => void;
 }
 
+/** Dispatches a detail route to the matching provider-backed detail view. */
 export function SocialDetailView(props: DetailProps) {
   switch (props.target.kind) {
     case "PROFILE": return <ProfileDetail {...props} target={props.target} />;

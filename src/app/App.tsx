@@ -16,6 +16,7 @@ import { invalidateSocialReadCache } from "../services/desktop/social";
 
 const titles: Readonly<Record<Page, string>> = { notifications: "Notifications", myprofiles: "My profiles", timeline: "Timeline", discover: "Discover", following: "Following", composer: "Composer", accounts: "Accounts & Sync", settings: "Settings" };
 
+/** Root workspace composition and navigation state for the React application. */
 export function App() {
   const navigation = useWorkspaceNavigation();
   const [visited, setVisited] = useState<ReadonlySet<Page>>(() => new Set(["timeline"]));

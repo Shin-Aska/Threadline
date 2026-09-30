@@ -12,6 +12,7 @@ import { SourceControls } from "./unified/SourceControls";
 import { ViewHeader } from "./unified/ViewHeader";
 
 interface DiscoverProps { readonly workspace: WorkspaceState; readonly onPost: (accountId: string, postId: string) => void; readonly onProfile: (accountId: string, profileId: string) => void; readonly onTag: (accountId: string, tag: string) => void }
+/** Combines provider discovery results and lets the user follow suggested accounts or topics. */
 export function DiscoverView(props: DiscoverProps) {
   const scope = useBrowsingScope("discover", props.workspace.accounts);
   const accounts = useMemo(() => props.workspace.accounts.filter(account => scope.selected.includes(account.id)), [props.workspace.accounts, scope.selected]);

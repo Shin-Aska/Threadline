@@ -20,6 +20,7 @@ const cancel = (flowId: string): Promise<void> =>
     ? invoke<void>("cancel_oauth_login", { flowId })
     : Promise.reject(new DesktopOAuthUnavailableError());
 
+/** Starts Mastodon authorization in the native browser and returns its cancel handle. */
 export const connectMastodonWithOAuth = (
   request: MastodonOAuthRequest,
 ): NativeOAuthAttempt => {
@@ -30,6 +31,7 @@ export const connectMastodonWithOAuth = (
   return { flowId, completion, cancel: () => cancel(flowId) };
 };
 
+/** Starts Bluesky OAuth authorization and returns its completion and cancel handle. */
 export const connectBlueskyWithOAuth = (
   request: BlueskyOAuthRequest,
 ): NativeOAuthAttempt => {

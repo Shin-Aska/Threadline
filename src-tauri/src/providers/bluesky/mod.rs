@@ -74,6 +74,10 @@ struct RecordResponse {
     cid: String,
 }
 
+/// Validates an app-password service endpoint before sending credentials.
+///
+/// Production endpoints must use HTTPS and omit user info, query, and fragment.
+/// HTTP loopback is permitted in tests so local mock servers can exercise the transport.
 pub(crate) fn validate_app_password_service_url(service_url: &str) -> Result<(), AppError> {
     let url = reqwest::Url::parse(service_url)
         .map_err(|_| AppError::Validation("Invalid Bluesky service URL".into()))?;
@@ -191,6 +195,7 @@ impl BlueskyProvider {
         Ok((session.did, session.handle))
     }
 
+    /// Resolves the account DID from the OAuth subject or active password session.
     pub(super) async fn account_did(&self) -> Result<String, AppError> {
         match &self.oauth {
             Some(oauth) => Ok(oauth.subject().into()),
@@ -198,6 +203,7 @@ impl BlueskyProvider {
         }
     }
 
+    /// Fetches JSON from an AT Protocol XRPC endpoint with the standard timeout.
     pub(super) async fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -207,6 +213,10 @@ impl BlueskyProvider {
             .await
     }
 
+    /// Fetches XRPC JSON using OAuth or a cached app-password session.
+    ///
+    /// A bearer-session 401 invalidates that session and retries once with a
+    /// newly created session; OAuth refresh and retry remain owned by its runtime.
     pub(super) async fn get_json_with_timeout<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -246,6 +256,7 @@ impl BlueskyProvider {
             .map_err(|error| AppError::Provider(format!("Bluesky request failed: {error}")))
     }
 
+    /// Sends a JSON XRPC request through the account's configured auth flow.
     pub(super) async fn post_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -274,6 +285,7 @@ impl BlueskyProvider {
         response_json(response).await
     }
 
+    /// Uploads a binary XRPC body with its media type and configured auth flow.
     pub(super) async fn post_bytes<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,

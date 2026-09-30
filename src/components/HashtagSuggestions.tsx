@@ -19,6 +19,7 @@ interface Props {
   readonly onClose: () => void;
 }
 const filters = [{ value: "ALL", label: "All" }, { value: "BLUESKY", label: "Bluesky" }, { value: "MASTODON", label: "Mastodon" }] as const;
+/** Renders account-backed hashtag suggestions anchored to the active editor token. */
 export function HashtagSuggestions({ query, accountIds, workspace, editor, text, anchorIndex, onChoose, onClose }: Props) {
   const { results, retry } = useHashtags(query, accountIds, workspace);
   const [filter, setFilter] = useState<Provider | "ALL">("ALL");

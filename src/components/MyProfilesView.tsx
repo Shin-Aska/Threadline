@@ -24,6 +24,7 @@ interface ProfilesProps {
 
 const kinds: readonly { readonly value: ProfileFeedKind; readonly label: string }[] = [{ value: "POSTS", label: "Posts" }, { value: "REPLIES", label: "Replies" }, { value: "MEDIA", label: "Media" }];
 
+/** Shows each connected account's own profile and authored feed. */
 export function MyProfilesView(props: ProfilesProps) {
   const account = props.workspace.accounts.find(item => item.id === props.accountId);
   const accounts = useMemo(() => account ? [account] : props.workspace.accounts, [account, props.workspace.accounts]);

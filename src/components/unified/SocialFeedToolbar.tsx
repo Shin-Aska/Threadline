@@ -20,6 +20,7 @@ interface ToolbarProps {
   readonly onHideReposts: (value: boolean) => void;
 }
 
+/** Controls loaded-post search, ordering, media filtering, and reply visibility. */
 export function SocialFeedToolbar(props: ToolbarProps) {
   const [sortOpen, setSortOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);

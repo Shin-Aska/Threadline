@@ -12,6 +12,7 @@ use crate::error::AppError;
 use super::Database;
 
 impl Database {
+    /// Creates the account-scoped table that records locally read notifications.
     pub(super) fn initialize_notification_reads(&self) -> Result<(), AppError> {
         self.connection()?.execute_batch(
             "CREATE TABLE IF NOT EXISTS notification_reads (

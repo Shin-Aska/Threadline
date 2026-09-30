@@ -50,6 +50,7 @@ type ExternalLinkProps = {
   readonly ariaLabel?: string;
 };
 
+/** Opens a validated HTTP(S) target through the app's external-link warning flow. */
 export function ExternalLink({ href, children, className, ariaLabel }: ExternalLinkProps) {
   const url = httpUrl(href);
   const [confirming, setConfirming] = useState(false);
@@ -93,6 +94,7 @@ type LinkifiedTextProps = {
   readonly onTag?: (tag: string) => void;
 };
 
+/** Renders post text with safe external links and optional tag navigation. */
 export function LinkifiedText({ text, onTag }: LinkifiedTextProps) {
   const parts: ReactNode[] = [];
   let cursor = 0;
@@ -115,6 +117,7 @@ export function LinkifiedText({ text, onTag }: LinkifiedTextProps) {
   return <>{parts}</>;
 }
 
+/** Controls the confirmation shown before opening external websites. */
 export function ExternalLinkWarningSetting() {
   const [enabled, setEnabled] = useState(warningEnabled);
   useEffect(() => {

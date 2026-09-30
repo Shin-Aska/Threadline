@@ -9,6 +9,7 @@ interface PostVideoProps {
   readonly originalUrl: string;
 }
 
+/** Plays provider video or HLS media and exposes the original post as fallback. */
 export function PostVideo({ url, alt, thumbnail, mediaType, originalUrl }: PostVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [unsupported, setUnsupported] = useState(false);

@@ -11,6 +11,7 @@ import { DetailHeader } from "./DetailHeader";
 import type { DetailTarget } from "./SocialDetailView";
 
 interface ThreadProps { readonly target: Extract<DetailTarget, { readonly kind: "POST" }>; readonly workspace: WorkspaceState; readonly onBack: () => void; readonly onPost: (accountId: string, postId: string) => void; readonly onProfile: (accountId: string, profileId: string) => void; readonly onTag: (accountId: string, tag: string) => void }
+/** Loads a post conversation and publishes replies through the selected account. */
 export function ThreadDetail(props: ThreadProps) {
   const [thread, setThread] = useState<ThreadView | null>(null);
   const [reply, setReply] = useState("");

@@ -5,6 +5,7 @@ import { boundFeedPages } from "../services/social/retention";
 import type { Account } from "../types";
 import type { FeedPage, FollowedSource, ProfileFeedKind } from "../types/social";
 
+/** Selects the feed operation used for every account in a social view. */
 export type SocialFeedSource =
   | { readonly kind: "HOME" }
   | { readonly kind: "OWN"; readonly feedKind: ProfileFeedKind }
@@ -12,6 +13,7 @@ export type SocialFeedSource =
   | { readonly kind: "TAG"; readonly tag: string }
   | { readonly kind: "SOURCE"; readonly source: FollowedSource };
 
+/** Account-scoped error retained when other feeds in the same view succeed. */
 export interface SocialFeedFailure {
   readonly accountId: string;
   readonly message: string;
@@ -30,7 +32,7 @@ function load(accountId: string, source: SocialFeedSource, cursor: string | null
   }
 }
 
-/** Rejects superseded pages and permits one feed request at a time per mounted view. */
+/** Aggregates provider feeds while rejecting superseded requests and paginating per account. */
 export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSource) {
   const [pages, setPages] = useState<Readonly<Record<string, FeedPage>>>({});
   const [failures, setFailures] = useState<readonly SocialFeedFailure[]>([]);

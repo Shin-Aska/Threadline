@@ -1,9 +1,12 @@
+/** Supported limits for retaining normalized posts in the in-memory read cache. */
 export const POST_CACHE_LIMITS = [0, 50, 100, 250, 500] as const;
+/** A post-cache limit offered by the settings UI. */
 export type PostCacheLimit = (typeof POST_CACHE_LIMITS)[number];
 
 const PREFERENCE_KEY = "threadline:post-cache-limit";
 const DEFAULT_LIMIT: PostCacheLimit = 250;
 
+/** Reads the saved cache limit, falling back when storage is unavailable or invalid. */
 export function readPostCacheLimit(): PostCacheLimit {
   if (typeof window === "undefined") return DEFAULT_LIMIT;
   try {
@@ -16,6 +19,7 @@ export function readPostCacheLimit(): PostCacheLimit {
   }
 }
 
+/** Saves the selected cache limit when browser storage permits persistence. */
 export function savePostCacheLimit(limit: PostCacheLimit): void {
   try {
     localStorage.setItem(PREFERENCE_KEY, String(limit));

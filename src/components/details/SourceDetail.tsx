@@ -10,6 +10,7 @@ import { DetailHeader } from "./DetailHeader";
 import type { DetailTarget } from "./SocialDetailView";
 
 interface SourceProps { readonly target: Extract<DetailTarget, { readonly kind: "SOURCE" }>; readonly workspace: WorkspaceState; readonly onBack: () => void; readonly onPost: (accountId: string, postId: string) => void; readonly onProfile: (accountId: string, profileId: string) => void; readonly onTag: (accountId: string, tag: string) => void }
+/** Loads and presents posts from one followed list, feed, person, or topic. */
 export function SourceDetail(props: SourceProps) {
   const account = props.workspace.accounts.find(account => account.id === props.target.accountId);
   const feed = useSocialFeed(account ? [account] : [], { kind: "SOURCE", source: props.target.source });

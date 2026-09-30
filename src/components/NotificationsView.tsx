@@ -37,6 +37,7 @@ const mergeNotifications = (existing: readonly NotificationItem[], incoming: rea
   return [...merged.values()];
 };
 
+/** Loads account notifications while active and supports filters and read state. */
 export function NotificationsView({ workspace, active, onPost, onProfile }: NotificationProps) {
   const [pages, setPages] = useState<Readonly<Record<string, NotificationPage>>>({});
   const [filter, setFilter] = useState<NotificationFilter>("ALL");

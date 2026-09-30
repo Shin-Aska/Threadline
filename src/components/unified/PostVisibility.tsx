@@ -6,6 +6,7 @@ interface PostVisibilityProps {
   readonly onToggle: () => void;
 }
 
+/** Hides warned or sensitive content until the reader explicitly reveals it. */
 export function PostVisibility({ warning, sensitive, hasMedia, revealed, onToggle }: PostVisibilityProps) {
   const summary = warning?.trim();
   if (!summary && !(sensitive && hasMedia)) return null;

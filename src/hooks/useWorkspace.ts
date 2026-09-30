@@ -3,6 +3,7 @@ import { desktopApi } from "../services/desktop";
 import { useComposerStore } from "../stores/composer";
 import type { WorkspaceState } from "../types";
 
+/** Loads workspace accounts and keeps composer destinations valid after changes. */
 export function useWorkspace() {
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [error, setError] = useState<string | null>(null);

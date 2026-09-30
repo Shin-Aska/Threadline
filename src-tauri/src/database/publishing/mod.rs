@@ -14,6 +14,7 @@ use crate::error::AppError;
 use rusqlite::OptionalExtension;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Returns Unix time in milliseconds, saturating if it cannot fit in `i64`.
 pub(crate) fn now_epoch_ms() -> i64 {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -23,6 +24,7 @@ pub(crate) fn now_epoch_ms() -> i64 {
 }
 
 impl Database {
+    /// Creates the draft, media, schedule, and publication-ledger tables.
     pub(crate) fn initialize_publishing(&self) -> Result<(), AppError> {
         self.connection()?.execute_batch(
             "CREATE TABLE IF NOT EXISTS publishing_schema_migrations (

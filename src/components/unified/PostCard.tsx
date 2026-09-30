@@ -7,6 +7,7 @@ import { ImageViewer } from "./ImageViewer";
 import { PostVisibility } from "./PostVisibility";
 import { PostVideo } from "./PostVideo";
 
+/** Renders a provider-neutral post with source attribution and supported actions. */
 export function PostCard({ post, accounts, onPost, onProfile }: { post: UnifiedPost; accounts: readonly Account[]; readonly onPost?: (accountId: string, postId: string) => void; readonly onProfile?: (accountId: string, profileId: string) => void }) {
   const [selectedImage, setSelectedImage] = useState<{ readonly url: string; readonly alt: string } | null>(null);
   const [revealed, setRevealed] = useState(false);

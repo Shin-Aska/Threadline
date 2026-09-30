@@ -32,6 +32,10 @@ impl MastodonProvider {
             .map(|(value, _)| value)
     }
 
+    /// Sends an authenticated GET and returns decoded JSON with response headers.
+    ///
+    /// Headers are retained for pagination metadata; failed statuses use a
+    /// bounded response excerpt so provider error bodies cannot flood the UI.
     pub(super) async fn social_get_with_headers<T: serde::de::DeserializeOwned>(
         &self,
         request: reqwest::RequestBuilder,

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Account, HashtagSuggestion, CanonicalPost, PublishResult, PublishingPreview, UnifiedDiscoveryResult, UnifiedFeedPage, UnifiedSource, WorkspaceState } from "../../types";
+/** Typed boundary for workspace, account, social, storage, and publishing commands. */
 export interface DesktopApi {
   workspace: { load(): Promise<WorkspaceState> };
   accounts: { list(): Promise<Account[]>; connectBluesky(serviceUrl: string, identifier: string, appPassword: string): Promise<Account>; connectMastodon(baseUrl: string, accessToken: string): Promise<Account>; remove(accountId: string): Promise<void> };
@@ -12,6 +13,7 @@ class DesktopOnlyError extends Error {
   constructor() { super("Open Threadline desktop to connect accounts, plan threads, and publish."); this.name = "DesktopOnlyError"; }
 }
 const unavailable = (): DesktopOnlyError => new DesktopOnlyError();
+/** Desktop-backed application API with browser-preview behavior where supported. */
 export const desktopApi: DesktopApi = {
   workspace: { load: () => runningInTauri() ? invoke<WorkspaceState>("get_workspace") : Promise.resolve({ accounts: [], connectedAccountIds: [], mode: "BROWSER" }) },
   accounts: {

@@ -30,6 +30,10 @@ type ScheduleRow = (
 );
 
 impl Database {
+    /// Queues the current draft revision at the requested instant and time zone.
+    ///
+    /// The post body is copied into the schedule so later draft edits do not
+    /// change what will be published. The returned record starts at revision 1.
     pub fn create_schedule(
         &self,
         input: CreateScheduleInput,
@@ -48,6 +52,9 @@ impl Database {
         self.get_schedule(&id)
     }
 
+    /// Loads a schedule and its linked publication result, if dispatch finished.
+    ///
+    /// Returns a validation error when `id` does not identify a stored schedule.
     pub fn get_schedule(&self, id: &str) -> Result<ScheduledPublication, AppError> {
         let row: Option<ScheduleRow> = self
             .connection()?
@@ -93,6 +100,7 @@ impl Database {
         })
     }
 
+    /// Lists stored schedules in due-time order, including completed entries.
     pub fn list_schedules(&self) -> Result<Vec<ScheduledPublication>, AppError> {
         let ids = {
             let connection = self.connection()?;
@@ -106,6 +114,11 @@ impl Database {
         ids.iter().map(|id| self.get_schedule(id)).collect()
     }
 
+    /// Changes a queued schedule's instant and zone if its revision still matches.
+    ///
+    /// Rescheduling moves the item back to `Queued` and clears any prior
+    /// attention reason or publication result. A claimed or stale revision
+    /// cannot be edited.
     pub fn reschedule(&self, input: RescheduleInput) -> Result<ScheduledPublication, AppError> {
         validate_time_zone(&input.time_zone)?;
         let changed = self.connection()?.execute(
@@ -122,6 +135,10 @@ impl Database {
         self.get_schedule(&input.id)
     }
 
+    /// Cancels an editable schedule when `expected_revision` is current.
+    ///
+    /// Dispatching and terminal schedules cannot be cancelled; a stale or
+    /// ineligible request returns a conflict.
     pub fn cancel_schedule(
         &self,
         id: &str,
@@ -140,6 +157,10 @@ impl Database {
         self.get_schedule(id)
     }
 
+    /// Claims a queued or attention-needed schedule for immediate dispatch.
+    ///
+    /// Returns `None` when the revision is stale or another action has already
+    /// claimed the schedule.
     pub fn claim_schedule_now(
         &self,
         id: &str,
@@ -157,6 +178,10 @@ impl Database {
         }
     }
 
+    /// Claims the earliest due schedule, or marks items beyond the grace window.
+    ///
+    /// Claiming and stale-item transitions occur in one transaction so only
+    /// one dispatcher can acquire an eligible schedule.
     pub fn claim_due_schedule(&self, now: i64) -> Result<Option<ScheduledPublication>, AppError> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;
@@ -192,6 +217,10 @@ impl Database {
             .transpose()
     }
 
+    /// Stores the publication result for a schedule already claimed for dispatch.
+    ///
+    /// Fully published destinations complete the schedule; any other outcome
+    /// leaves it in `NeedsAttention` for user review.
     pub fn complete_schedule(
         &self,
         id: &str,
@@ -220,6 +249,7 @@ impl Database {
         self.get_schedule(id)
     }
 
+    /// Returns a claimed schedule to `NeedsAttention` with the dispatch reason.
     pub fn fail_schedule(&self, id: &str, reason: &str) -> Result<ScheduledPublication, AppError> {
         let changed = self.connection()?.execute(
             "UPDATE scheduled_publications SET revision=revision+1,status='NEEDS_ATTENTION',attention_reason=?2,updated_at_ms=?3
@@ -232,6 +262,10 @@ impl Database {
         self.get_schedule(id)
     }
 
+    /// Moves due schedules and interrupted dispatches to `NeedsAttention` at startup.
+    ///
+    /// This avoids publishing a stale schedule automatically after the app was
+    /// closed and makes uncertain in-progress work visible for review.
     pub fn mark_startup_missed(&self, now: i64) -> Result<(), AppError> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;

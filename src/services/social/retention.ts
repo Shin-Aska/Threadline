@@ -7,6 +7,7 @@ function remaining(total: number): number {
   return Math.max(0, VIEW_POST_LIMIT - total);
 }
 
+/** Trims stored feed pages to the configured per-account retention limit. */
 export function boundFeedPages(pages: Readonly<Record<string, FeedPage>>): Readonly<Record<string, FeedPage>> {
   let total = 0;
   let truncated = false;
@@ -20,6 +21,7 @@ export function boundFeedPages(pages: Readonly<Record<string, FeedPage>>): Reado
   return truncated ? Object.fromEntries(Object.entries(bounded).map(([key, page]) => [key, { ...page, cursor: null }])) : bounded;
 }
 
+/** Trims stored notification pages while preserving each account's cursor. */
 export function boundNotificationPages(pages: Readonly<Record<string, NotificationPage>>): Readonly<Record<string, NotificationPage>> {
   let postCount = 0;
   let truncated = false;

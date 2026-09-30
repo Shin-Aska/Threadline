@@ -13,6 +13,10 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use rusqlite::{params, OptionalExtension};
 
 impl Database {
+    /// Removes UUID-named media files that no draft references.
+    ///
+    /// Called during database initialization to recover files left behind if
+    /// the process stopped between a filesystem write and a later database update.
     pub(crate) fn cleanup_orphaned_media(&self) -> Result<(), AppError> {
         let referenced = {
             let connection = self.connection()?;
@@ -35,6 +39,11 @@ impl Database {
         Ok(())
     }
 
+    /// Creates or updates a draft using its optimistic revision as a write guard.
+    ///
+    /// Attachment bytes are stored in separate files; the serialized post keeps
+    /// their metadata and the returned record is reloaded with bytes restored.
+    /// An update without the current expected revision returns a conflict.
     pub fn save_draft(&self, input: SaveDraftInput) -> Result<DraftRecord, AppError> {
         if input
             .id
@@ -98,6 +107,10 @@ impl Database {
         self.get_draft(&id)
     }
 
+    /// Loads a draft and restores its separately persisted media bytes.
+    ///
+    /// Returns a validation error when the draft is missing and a storage error
+    /// if its metadata references an unavailable attachment file.
     pub fn get_draft(&self, id: &str) -> Result<DraftRecord, AppError> {
         let connection = self.connection()?;
         let (revision, post_json, created_at, updated_at): (i64, String, i64, i64) = connection
@@ -140,6 +153,7 @@ impl Database {
         })
     }
 
+    /// Lists drafts newest updated first, loading their attachment bytes as well.
     pub fn list_drafts(&self) -> Result<Vec<DraftRecord>, AppError> {
         let ids = {
             let connection = self.connection()?;
@@ -153,6 +167,9 @@ impl Database {
         ids.iter().map(|id| self.get_draft(id)).collect()
     }
 
+    /// Deletes a draft and removes its attachment files after deleting the row.
+    ///
+    /// Returns a validation error when the draft does not exist.
     pub fn delete_draft(&self, id: &str) -> Result<(), AppError> {
         let old_files = {
             let connection = self.connection()?;

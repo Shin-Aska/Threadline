@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { desktopApi } from "../services/desktop";
 import type { HashtagSuggestion, WorkspaceState } from "../types";
 
+/** Hashtag token and query range around a collapsed editor selection. */
 export interface ActiveHashtag { readonly start: number; readonly end: number; readonly query: string }
+/** Finds a hashtag immediately before the caret and the token text after it. */
 export function activeHashtag(text: string, start: number, end: number): ActiveHashtag | null {
   if (start !== end) return null;
   const before = text.slice(0, start);
@@ -12,8 +14,10 @@ export function activeHashtag(text: string, start: number, end: number): ActiveH
   const tail = /^[\p{L}\p{M}\p{N}_]*/u.exec(text.slice(start))?.[0] ?? "";
   return { start: start - query.length - 1, end: start + tail.length, query };
 }
+/** Per-account lookup result, kept as a union so errors cannot masquerade as data. */
 export type HashtagResult = { readonly status: "ready"; readonly suggestions: readonly HashtagSuggestion[] }
   | { readonly status: "error"; readonly error: string };
+/** Loads hashtag suggestions for eligible accounts with debounce, short caching, and retry. */
 export function useHashtags(query: string | null, accountIds: readonly string[], workspace: WorkspaceState) {
   const [results, setResults] = useState<{ readonly key: string; readonly items: Readonly<Record<string, HashtagResult>> }>({ key: "", items: {} });
   const retryRequest = useRef<(accountId: string) => void>(() => {});

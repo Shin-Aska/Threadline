@@ -1,5 +1,6 @@
 import { useEffect, useState, type RefObject } from "react";
 
+/** Expands the page's rails when their headers scroll above the workspace header. */
 export function useAdaptiveRailExpansion(primary: RefObject<HTMLElement | null>, secondary?: RefObject<HTMLElement | null>): boolean {
   const [expanded, setExpanded] = useState(false);
 

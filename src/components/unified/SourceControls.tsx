@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { Account, Provider } from "../../types";
 import { ProviderIcon } from "../ui";
 
+/** Filters a unified view by account or selects all accounts from one provider. */
 export function SourceControls({ accounts, selected, onToggle, onSelectProvider }: { accounts: readonly Account[]; selected: readonly string[]; onToggle: (id: string) => void; onSelectProvider: (provider: Provider | "ALL") => void }) {
   const [open, setOpen] = useState<Provider | null>(null);
   const count = (provider: Provider) => accounts.filter(account => account.provider === provider && selected.includes(account.id)).length;
