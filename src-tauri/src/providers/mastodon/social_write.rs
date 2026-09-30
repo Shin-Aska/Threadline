@@ -2,7 +2,6 @@
 
 use crate::{
     error::AppError,
-    models::PublishedPost,
     providers::social::{SocialAction, SocialActionResult, ViewerState},
 };
 
@@ -77,7 +76,7 @@ impl MastodonProvider {
                 self.follow_action(&profile_id, "unfollow", false).await
             }
             SocialAction::Reply { post_id, text } => {
-                let published = self
+                let (published, status) = self
                     .create_status(
                         crate::models::PreparedPost {
                             text,
@@ -86,7 +85,13 @@ impl MastodonProvider {
                         Some(&post_id),
                     )
                     .await?;
-                self.reply_result(post_id, published).await
+                Ok(SocialActionResult {
+                    target_id: post_id,
+                    viewer: None,
+                    followed: None,
+                    record_id: Some(published.remote_id),
+                    created_post: Some(normalize::post(&self.base_url, status)?),
+                })
             }
         }
     }
@@ -137,29 +142,6 @@ impl MastodonProvider {
             followed: Some(relationship.following && followed),
             record_id: None,
             created_post: None,
-        })
-    }
-
-    async fn reply_result(
-        &self,
-        parent_id: String,
-        published: PublishedPost,
-    ) -> Result<SocialActionResult, AppError> {
-        let status: native::Status = self
-            .social_get(
-                self.client.get(format!(
-                    "{}/api/v1/statuses/{}",
-                    self.base_url, published.remote_id
-                )),
-                "reply",
-            )
-            .await?;
-        Ok(SocialActionResult {
-            target_id: parent_id,
-            viewer: None,
-            followed: None,
-            record_id: Some(published.remote_id),
-            created_post: Some(normalize::post(&self.base_url, status)?),
         })
     }
 }
