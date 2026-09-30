@@ -36,7 +36,9 @@ impl MastodonProvider {
         if let Some(cursor) = cursor {
             people_request = people_request.query(&[("max_id", cursor)]);
         }
-        let people: Vec<native::Account> = self.social_get(people_request, "following").await?;
+        let (people, headers): (Vec<native::Account>, _) = self
+            .social_get_with_headers(people_request, "following")
+            .await?;
         let (tags, lists) = if cursor.is_none() {
             let tags: Vec<native::Tag> = self
                 .social_get(
@@ -55,7 +57,7 @@ impl MastodonProvider {
         } else {
             (Vec::new(), Vec::new())
         };
-        let cursor = people.last().map(|account| account.id.clone());
+        let cursor = next_max_id(&headers);
         let mut sources = people
             .into_iter()
             .map(|account| FollowedSource {
@@ -169,4 +171,34 @@ impl MastodonProvider {
             cursor,
         })
     }
+}
+
+fn next_max_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    for header in headers
+        .get_all(reqwest::header::LINK)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+    {
+        for entry in header.split(',') {
+            let Some((url, attributes)) = entry.split_once('>') else {
+                continue;
+            };
+            if !attributes
+                .split(';')
+                .any(|part| part.trim() == "rel=\"next\"" || part.trim() == "rel=next")
+            {
+                continue;
+            }
+            let Some(url) = url.trim().strip_prefix('<') else {
+                continue;
+            };
+            let Ok(url) = reqwest::Url::parse(url) else {
+                continue;
+            };
+            if let Some((_, value)) = url.query_pairs().find(|(key, _)| key == "max_id") {
+                return Some(value.into_owned());
+            }
+        }
+    }
+    None
 }
