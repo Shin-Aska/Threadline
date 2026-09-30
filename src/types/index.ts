@@ -22,7 +22,7 @@ export interface SourceAttribution { readonly accountId: string; readonly accoun
 export interface UnifiedActor { readonly id: string; readonly displayName: string; readonly handle: string; readonly avatarUrl: string | null }
 export interface UnifiedPost {
   readonly canonicalKey: string; readonly provider: Provider; readonly remoteId: string; readonly remoteUrl: string;
-  readonly author: UnifiedActor; readonly text: string; readonly createdAt: string; readonly media: readonly { url: string; alt: string; type: string }[];
+  readonly author: UnifiedActor; readonly text: string; readonly contentWarning?: string | null; readonly sensitive?: boolean; readonly createdAt: string; readonly media: readonly { url: string; alt: string; type: string; thumbnail?: string | null }[];
   readonly sources: readonly SourceAttribution[]; readonly metrics: { replies?: number; reposts?: number; likes?: number };
   readonly capabilities: { openOriginal: true; reply: boolean; like: boolean; repost: boolean };
 }
