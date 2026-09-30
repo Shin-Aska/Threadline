@@ -74,6 +74,28 @@ struct RecordResponse {
     cid: String,
 }
 
+pub(crate) fn validate_app_password_service_url(service_url: &str) -> Result<(), AppError> {
+    let url = reqwest::Url::parse(service_url)
+        .map_err(|_| AppError::Validation("Invalid Bluesky service URL".into()))?;
+    let test_loopback = cfg!(test)
+        && url.scheme() == "http"
+        && url
+            .host_str()
+            .and_then(|host| host.parse::<std::net::IpAddr>().ok())
+            .is_some_and(|ip| ip.is_loopback());
+    if !(url.scheme() == "https" || test_loopback)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AppError::Validation(
+            "Bluesky service URL must use HTTPS without credentials, query, or fragment".into(),
+        ));
+    }
+    Ok(())
+}
+
 impl BlueskyProvider {
     async fn create_session(&self) -> Result<SessionResponse, AppError> {
         if self.oauth.is_some() {
@@ -81,8 +103,18 @@ impl BlueskyProvider {
                 "OAuth accounts do not expose bearer sessions".into(),
             ));
         }
+        validate_app_password_service_url(&self.service_url)?;
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(!cfg!(test))
+            .user_agent(concat!("Threadline/", env!("CARGO_PKG_VERSION")));
+        #[cfg(test)]
+        let client = client.no_proxy();
+        let client = client
+            .build()
+            .map_err(|error| AppError::Provider(format!("Bluesky client failed: {error}")))?;
         self.request(
-            self.client.post(format!(
+            client.post(format!(
                 "{}/xrpc/com.atproto.server.createSession",
                 self.service_url.trim_end_matches('/')
             )),
@@ -346,16 +378,9 @@ impl BlueskyProvider {
                     )
                     .await?
                 }
-                (None, Some(session)) => {
-                    video::upload_video(
-                        &self.client,
-                        &self.service_url,
-                        video::service_url(&self.service_url),
-                        &session.access_jwt,
-                        &did,
-                        video,
-                    )
-                    .await?
+                (None, Some(_)) => {
+                    video::upload_video(self, video::service_url(&self.service_url), &did, video)
+                        .await?
                 }
                 (Some(_), Some(_)) | (None, None) => return Err(AppError::StateUnavailable),
             };
@@ -380,23 +405,13 @@ impl BlueskyProvider {
                         )
                         .await?
                     }
-                    (None, Some(session)) => {
-                        let response = self
-                            .client
-                            .post(format!(
-                                "{}/xrpc/com.atproto.repo.uploadBlob",
-                                self.service_url.trim_end_matches('/')
-                            ))
-                            .bearer_auth(&session.access_jwt)
-                            .header(reqwest::header::CONTENT_TYPE, &image.mime_type)
-                            .timeout(std::time::Duration::from_secs(60))
-                            .body(image.data.to_vec())
-                            .send()
-                            .await
-                            .map_err(|error| {
-                                AppError::Provider(format!("Bluesky image upload failed: {error}"))
-                            })?;
-                        response_json(response).await?
+                    (None, Some(_)) => {
+                        self.post_bytes(
+                            "com.atproto.repo.uploadBlob",
+                            &image.mime_type,
+                            image.data.to_vec(),
+                        )
+                        .await?
                     }
                     (Some(_), Some(_)) | (None, None) => return Err(AppError::StateUnavailable),
                 };
@@ -423,17 +438,9 @@ impl BlueskyProvider {
                 self.post_json("com.atproto.repo.createRecord", body)
                     .await?
             }
-            (None, Some(session)) => {
-                self.request(
-                    self.client
-                        .post(format!(
-                            "{}/xrpc/com.atproto.repo.createRecord",
-                            self.service_url.trim_end_matches('/')
-                        ))
-                        .bearer_auth(&session.access_jwt),
-                    body,
-                )
-                .await?
+            (None, Some(_)) => {
+                self.post_json("com.atproto.repo.createRecord", body)
+                    .await?
             }
             (Some(_), Some(_)) | (None, None) => return Err(AppError::StateUnavailable),
         };
@@ -549,13 +556,13 @@ impl SocialProvider for BlueskyProvider {
         account_handle: &str,
         cursor: Option<&str>,
     ) -> Result<serde_json::Value, AppError> {
-        let mut query = vec![("limit", "50")];
-        if let Some(cursor) = cursor {
-            query.push(("cursor", cursor));
-        }
-        let native: serde_json::Value = self.get_json("app.bsky.feed.getTimeline", &query).await?;
-        let posts = native["feed"].as_array().into_iter().flatten().filter_map(|item| { let post=&item["post"]; let uri=post["uri"].as_str()?; let author=&post["author"]; let record=&post["record"]; let handle=author["handle"].as_str().unwrap_or(""); let rkey=uri.rsplit('/').next().unwrap_or(""); let media=item["post"]["embed"]["images"].as_array().map(|images| images.iter().map(|image| serde_json::json!({"url":image["fullsize"],"alt":image["alt"].as_str().unwrap_or(""),"type":"image"})).collect::<Vec<_>>()).unwrap_or_default(); Some(serde_json::json!({"canonicalKey":format!("BLUESKY:{uri}"),"provider":"BLUESKY","remoteId":uri,"remoteUrl":format!("https://bsky.app/profile/{handle}/post/{rkey}"),"author":{"id":author["did"],"displayName":author["displayName"].as_str().unwrap_or(handle),"handle":handle,"avatarUrl":author["avatar"].as_str()},"text":record["text"].as_str().unwrap_or(""),"createdAt":record["createdAt"].as_str().unwrap_or(""),"media":media,"sources":[{"accountId":account_id,"accountHandle":account_handle,"provider":"BLUESKY"}],"metrics":{"replies":post["replyCount"],"reposts":post["repostCount"],"likes":post["likeCount"]},"capabilities":{"openOriginal":true,"reply":false,"like":false,"repost":false}})) }).collect::<Vec<_>>();
-        Ok(serde_json::json!({"posts":posts,"cursor":native["cursor"].as_str()}))
+        let page = self.home_feed_page(cursor).await?;
+        let posts = page
+            .posts
+            .into_iter()
+            .map(|post| crate::providers::legacy_post(post, account_id, account_handle))
+            .collect::<Vec<_>>();
+        Ok(serde_json::json!({"posts": posts, "cursor": page.cursor}))
     }
     async fn discovery(
         &self,
