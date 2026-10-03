@@ -82,22 +82,23 @@ test("Following uses one cached provider home stream for 100 people and preserve
   await expect(page.locator(".unified-page:visible").getByText("Provider following stream post", { exact: true })).toBeVisible();
 });
 
-test("notification polling runs only while active and visible and resumes once", async ({ page }) => {
+test("notification polling updates the sidebar on every page, pauses while hidden and resumes once", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-20T08:00:00Z") });
   await installLifecycleDesktop(page);
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "Notifications", exact: true }).locator(".connected-count")).toHaveText("1");
   await page.getByRole("button", { name: "Notifications", exact: true }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("1");
   await page.getByRole("button", { name: "Timeline", exact: true }).click();
   await page.clock.runFor(90_000);
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("1");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("4");
   await page.getByRole("button", { name: "Notifications", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("2");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("4");
   await page.evaluate(() => window.dispatchEvent(new Event("qa-document-hidden")));
   await page.clock.runFor(90_000);
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("2");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("4");
   await page.evaluate(() => { window.dispatchEvent(new Event("qa-document-visible")); window.dispatchEvent(new Event("qa-document-visible")); });
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("3");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa-notification-count") ?? "0")).toBe("5");
   for (const width of [375, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.locator("#main").evaluate(element => { element.scrollTop = 0; });

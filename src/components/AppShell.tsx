@@ -8,6 +8,7 @@ export type Page = "notifications" | "myprofiles" | "timeline" | "discover" | "f
 interface ShellProps {
   readonly accounts: readonly Account[];
   readonly connectedAccountIds: readonly string[];
+  readonly unreadNotificationCount: number;
   readonly page: Page;
   readonly mode: WorkspaceMode;
   readonly onNavigate: (page: Page) => void;
@@ -17,15 +18,16 @@ interface ShellProps {
   readonly children: ReactNode;
 }
 /** Shared desktop layout with navigation rails, account status, and active content. */
-export function AppShell({ accounts, connectedAccountIds, page, mode, onNavigate, profileAccountId, onProfileAccount, onCompose, children }: ShellProps) {
+export function AppShell({ accounts, connectedAccountIds, unreadNotificationCount, page, mode, onNavigate, profileAccountId, onProfileAccount, onCompose, children }: ShellProps) {
   const connectedCount = accounts.filter(account => connectedAccountIds.includes(account.id)).length;
   const connectionSummary = `${connectedCount} connected ${connectedCount === 1 ? "account" : "accounts"}`;
+  const notificationSummary = `${unreadNotificationCount} unread ${unreadNotificationCount === 1 ? "notification" : "notifications"}`;
   return <div className="shell">
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="workspace-brandbar"><img src={new URL("../assets/threadline-logo.svg", import.meta.url).href} width={32} height={32} alt="" /><strong>Threadline</strong></header>
     <aside className="sidebar">
       <nav aria-label="Main navigation">
-        <div className="nav-group"><button className={page === "notifications" ? "nav-item active" : "nav-item"} aria-current={page === "notifications" ? "page" : undefined} onClick={() => onNavigate("notifications")} title="Notifications"><Bell size={18} /><span>Notifications</span></button></div>
+        <div className="nav-group"><button className={page === "notifications" ? "nav-item active" : "nav-item"} aria-label="Notifications" aria-describedby="unread-notification-count" aria-current={page === "notifications" ? "page" : undefined} onClick={() => onNavigate("notifications")} title={"Notifications · " + notificationSummary}><Bell size={18} /><span>Notifications</span>{unreadNotificationCount > 0 && <small className="connected-count" aria-hidden="true">{unreadNotificationCount}</small>}</button></div>
         <div className="nav-group"><button className={page === "myprofiles" ? "nav-item active" : "nav-item"} aria-current={page === "myprofiles" ? "page" : undefined} onClick={() => { onProfileAccount(null); onNavigate("myprofiles"); }} title="My profiles"><Users size={18} /><span>My profiles</span><ChevronDown className="nav-chevron" size={14} /></button>{page === "myprofiles" && <div className="subnav"><button className={profileAccountId === null ? "active" : ""} onClick={() => onProfileAccount(null)}>Unified</button>{accounts.map(account => <button className={profileAccountId === account.id ? "active" : ""} key={account.id} onClick={() => onProfileAccount(account.id)}><span>{account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</span><small className="own-nav-handle">@{account.handle.replace(/^@/, "")}</small></button>)}</div>}</div>
         <div className="nav-group"><button className={page === "timeline" ? "nav-item active" : "nav-item"} aria-current={page === "timeline" ? "page" : undefined} onClick={() => onNavigate("timeline")} title="Timeline"><Home size={18} /><span>Timeline</span></button></div>
         <button className={page === "discover" ? "nav-item active" : "nav-item"} aria-current={page === "discover" ? "page" : undefined} onClick={() => onNavigate("discover")} title="Discover"><Compass size={18} /><span>Discover</span></button>
@@ -35,6 +37,7 @@ export function AppShell({ accounts, connectedAccountIds, page, mode, onNavigate
         <button className={page === "settings" ? "nav-item active" : "nav-item"} aria-current={page === "settings" ? "page" : undefined} onClick={() => onNavigate("settings")} title="Settings"><Settings2 size={18} /><span>Settings</span></button>
       </nav>
       <p className="sr-only" id="connected-account-count" role="status">{connectionSummary}</p>
+      <p className="sr-only" id="unread-notification-count" role="status">{notificationSummary}</p>
       <div className="sidebar-bottom"><div className="local-note"><ShieldCheck size={18} /><div><strong>Your accounts. Your control.</strong><p>Credentials are kept in your system’s secure credential store.</p></div></div><span className="version">THREADLINE / {packageJson.version}</span></div>
     </aside>
     <div className="app-content">

@@ -87,6 +87,7 @@ pub fn run() {
             commands::connect_mastodon,
             commands::remove_account,
             commands::storage_health,
+            commands::external::open_external_url,
             oauth::commands::connect_mastodon_oauth,
             oauth::commands::connect_bluesky_oauth,
             oauth::commands::cancel_oauth_login,
