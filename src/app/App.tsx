@@ -20,6 +20,7 @@ const titles: Readonly<Record<Page, string>> = { notifications: "Notifications",
 export function App() {
   const navigation = useWorkspaceNavigation();
   const [visited, setVisited] = useState<ReadonlySet<Page>>(() => new Set(["timeline"]));
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const { workspace, error, refreshing, refresh } = useWorkspace();
   const needsSetup = workspace?.accounts.length === 0;
   useEffect(() => { setVisited(current => new Set(current).add(navigation.page)); }, [navigation.page]);
@@ -31,10 +32,10 @@ export function App() {
   const openTag = (accountId: string, id: string) => navigation.openDetail({ kind: "TAG", accountId, id, origin: titles[navigation.page] });
   const compose = () => { navigation.navigate("composer"); requestAnimationFrame(() => document.getElementById("post-text")?.focus()); };
   const pageProps = { workspace, onPost: openPost, onProfile: openProfile, onTag: openTag };
-  return <AppShell connectedAccountIds={workspace.connectedAccountIds} accounts={workspace.accounts} page={navigation.page} profileAccountId={navigation.profileAccountId} mode={workspace.mode} onNavigate={navigation.navigate} onProfileAccount={navigation.selectProfileAccount} onCompose={compose}>
+  return <AppShell connectedAccountIds={workspace.connectedAccountIds} unreadNotificationCount={unreadNotificationCount} accounts={workspace.accounts} page={navigation.page} profileAccountId={navigation.profileAccountId} mode={workspace.mode} onNavigate={navigation.navigate} onProfileAccount={navigation.selectProfileAccount} onCompose={compose}>
     {workspaceError}
     {navigation.detail && <SocialDetailView target={navigation.detail} workspace={workspace} onBack={navigation.back} onPost={openPost} onProfile={openProfile} onTag={openTag} />}
-    {visited.has("notifications") && <div hidden={navigation.detail !== null || navigation.page !== "notifications"}><NotificationsView workspace={workspace} active={navigation.detail === null && navigation.page === "notifications"} onPost={openPost} onProfile={openProfile} /></div>}
+    <div hidden={navigation.detail !== null || navigation.page !== "notifications"}><NotificationsView key={[...workspace.connectedAccountIds].sort().join("\0")} workspace={workspace} onUnreadCount={setUnreadNotificationCount} onPost={openPost} onProfile={openProfile} /></div>
     {visited.has("myprofiles") && <div hidden={navigation.detail !== null || navigation.page !== "myprofiles"}><MyProfilesView {...pageProps} accountId={navigation.profileAccountId} onAccount={navigation.selectProfileAccount} onAccounts={() => navigation.navigate("accounts")} /></div>}
     {visited.has("timeline") && <div hidden={navigation.detail !== null || navigation.page !== "timeline"}><TimelineView {...pageProps} /></div>}
     {visited.has("discover") && <div hidden={navigation.detail !== null || navigation.page !== "discover"}><DiscoverView {...pageProps} /></div>}

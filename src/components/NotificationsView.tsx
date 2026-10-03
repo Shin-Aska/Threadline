@@ -11,7 +11,7 @@ import { ViewHeader } from "./unified/ViewHeader";
 type NotificationFilter = "ALL" | "MENTIONS" | "INTERACTIONS";
 interface NotificationProps {
   readonly workspace: WorkspaceState;
-  readonly active: boolean;
+  readonly onUnreadCount: (count: number) => void;
   readonly onPost: (accountId: string, postId: string) => void;
   readonly onProfile: (accountId: string, profileId: string) => void;
 }
@@ -37,8 +37,9 @@ const mergeNotifications = (existing: readonly NotificationItem[], incoming: rea
   return [...merged.values()];
 };
 
-/** Loads account notifications while active and supports filters and read state. */
-export function NotificationsView({ workspace, active, onPost, onProfile }: NotificationProps) {
+/** Keeps unread activity current while the app is visible, including outside this view. */
+export function NotificationsView({ workspace, onUnreadCount, onPost, onProfile }: NotificationProps) {
+  const accounts = useMemo(() => workspace.accounts.filter(account => workspace.connectedAccountIds.includes(account.id)), [workspace.accounts, workspace.connectedAccountIds]);
   const [pages, setPages] = useState<Readonly<Record<string, NotificationPage>>>({});
   const [filter, setFilter] = useState<NotificationFilter>("ALL");
   const railRef = useRef<HTMLDivElement>(null);
@@ -47,10 +48,9 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const pendingRefresh = useRef<{ readonly quiet: boolean; readonly force: boolean } | null>(null);
-  const activeRef = useRef(active);
   const visibleRef = useRef(document.visibilityState === "visible");
   const loadedRef = useRef(false);
-  const lastActiveRef = useRef(false);
+  const mountedRef = useRef(false);
   const failureCount = useRef(0);
   const timer = useRef<number | null>(null);
   const refreshRef = useRef<(quiet?: boolean, force?: boolean) => Promise<void>>(async () => undefined);
@@ -58,54 +58,51 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = null;
   }, []);
-  // A retained hidden page must not keep a notification poll timer alive.
+  // The sidebar needs current counts on every page; pause when the app is hidden.
   const schedule = useCallback(() => {
     clearTimer();
-    if (!activeRef.current || !visibleRef.current) return;
+    if (!mountedRef.current || !visibleRef.current || accounts.length === 0) return;
     const delay = Math.min(POLL_INTERVAL_MS * 2 ** failureCount.current, MAX_POLL_INTERVAL_MS);
     timer.current = window.setTimeout(() => void refreshRef.current(true, true), delay);
-  }, [clearTimer]);
+  }, [clearTimer, accounts.length]);
   const refresh = useCallback(async (quiet = false, force = false) => {
     if (inFlight.current) { pendingRefresh.current = { quiet, force }; return; }
     inFlight.current = true;
     clearTimer();
     if (!quiet) setLoading(true);
     setError(null);
-    const results = await Promise.all(workspace.accounts.map(async account => {
+    const results = await Promise.all(accounts.map(async account => {
       try { return { accountId: account.id, page: await socialApi.notifications(account.id, null, { refresh: force }), error: null }; }
       catch (cause) { return { accountId: account.id, page: null, error: cause instanceof Error ? cause.message : String(cause) }; }
     }));
+    if (!mountedRef.current) return;
     setPages(currentPages => boundNotificationPages(Object.fromEntries(results.map(result => { const previous = currentPages[result.accountId]; return [result.accountId, result.page ? { cursor: previous ? previous.cursor : result.page.cursor, notifications: mergeNotifications(previous?.notifications ?? [], result.page.notifications) } : previous ?? { notifications: [], cursor: null }]; }))));
-    const failures = results.filter(result => result.error).map(result => `${workspace.accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
+    const failures = results.filter(result => result.error).map(result => `${accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
     failureCount.current = failures.length > 0 ? failureCount.current + 1 : 0;
     setError(failures.length ? failures.join(" · ") : null);
     setLoading(false);
     inFlight.current = false;
     const pending = pendingRefresh.current;
     pendingRefresh.current = null;
-    if (pending && activeRef.current && visibleRef.current) await refreshRef.current(pending.quiet, pending.force);
+    if (pending && visibleRef.current) await refreshRef.current(pending.quiet, pending.force);
     else schedule();
-  }, [clearTimer, schedule, workspace.accounts]);
+  }, [clearTimer, schedule, accounts]);
   refreshRef.current = refresh;
   useEffect(() => {
-    activeRef.current = active;
-    if (!active) { lastActiveRef.current = false; clearTimer(); return; }
-    const resumed = !lastActiveRef.current;
-    lastActiveRef.current = true;
-    if (visibleRef.current && resumed) {
+    mountedRef.current = true;
+    if (visibleRef.current && !inFlight.current) {
       const force = loadedRef.current;
       loadedRef.current = true;
       void refreshRef.current(force, force);
     }
-    return clearTimer;
-  }, [active, clearTimer, workspace.accounts]);
+    return () => { mountedRef.current = false; clearTimer(); };
+  }, [clearTimer, accounts]);
   useEffect(() => {
     const visibilityChanged = () => {
       const visible = document.visibilityState === "visible";
       if (visible === visibleRef.current) return;
       visibleRef.current = visible;
       if (!visible) { clearTimer(); return; }
-      if (!activeRef.current) return;
       const force = loadedRef.current;
       loadedRef.current = true;
       void refreshRef.current(force, force);
@@ -114,17 +111,28 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
     return () => { document.removeEventListener("visibilitychange", visibilityChanged); clearTimer(); };
   }, [clearTimer]);
   const notifications = useMemo(() => Object.entries(pages).flatMap(([accountId, page]) => page.notifications.map(item => ({ accountId, item }))).sort((left, right) => Date.parse(right.item.createdAt) - Date.parse(left.item.createdAt)), [pages]);
+  const unreadCount = notifications.filter(({ item }) => item.unread).length;
+  useEffect(() => { onUnreadCount(unreadCount); }, [onUnreadCount, unreadCount]);
   const visible = notifications.filter(({ item }) => filter === "ALL" || filter === "MENTIONS" && ["MENTION", "REPLY", "QUOTE"].includes(item.kind) || filter === "INTERACTIONS" && ["LIKE", "REPOST", "FOLLOW"].includes(item.kind));
   const markRead = async () => {
     setError(null);
     try {
-      await Promise.all(Object.entries(pages).map(([accountId, page]) => socialApi.markNotificationsRead(accountId, page.notifications.filter(item => item.unread).map(item => item.id))));
-      setPages(current => Object.fromEntries(Object.entries(current).map(([accountId, page]) => [accountId, { ...page, notifications: page.notifications.map(item => ({ ...item, unread: false })) }])));
+      await Promise.all(Object.entries(pages).map(async ([accountId, page]) => {
+        const ids = page.notifications.filter(item => item.unread).map(item => item.id);
+        if (ids.length === 0) return;
+        await socialApi.markNotificationsRead(accountId, ids);
+        if (!mountedRef.current) return;
+        setPages(current => {
+          const currentPage = current[accountId];
+          if (!currentPage) return current;
+          return { ...current, [accountId]: { ...currentPage, notifications: currentPage.notifications.map(item => ids.includes(item.id) ? { ...item, unread: false } : item) } };
+        });
+      }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
   };
   const more = async () => {
     if (inFlight.current) return;
-    const targets = workspace.accounts.filter(account => pages[account.id]?.cursor);
+    const targets = accounts.filter(account => pages[account.id]?.cursor);
     if (targets.length === 0) return;
     inFlight.current = true;
     clearTimer();
@@ -133,6 +141,7 @@ export function NotificationsView({ workspace, active, onPost, onProfile }: Noti
       try { return { accountId: account.id, page: await socialApi.notifications(account.id, pages[account.id]?.cursor ?? null), error: null }; }
       catch (cause) { return { accountId: account.id, page: null, error: cause instanceof Error ? cause.message : String(cause) }; }
     }));
+    if (!mountedRef.current) return;
     setPages(current => {
       const next = { ...current };
       for (const result of results) if (result.page) next[result.accountId] = { cursor: result.page.cursor, notifications: mergeNotifications(current[result.accountId]?.notifications ?? [], result.page.notifications) };

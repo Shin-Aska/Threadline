@@ -3,6 +3,7 @@
 //! Connected providers live in [`AppState`], while account records and drafts are persisted.
 mod account_identity;
 pub mod browsing;
+pub mod external;
 pub mod publishing;
 use crate::providers::{bluesky::BlueskyProvider, mastodon::MastodonProvider};
 use crate::{composer, error::AppError, models::*, AppState};
