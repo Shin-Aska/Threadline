@@ -1,6 +1,7 @@
 //! Threadline's Tauri application assembly and shared runtime state.
 #[cfg(test)]
 pub mod accounts;
+pub mod browser_cache;
 pub mod commands;
 pub mod composer;
 pub mod config;
@@ -87,6 +88,9 @@ pub fn run() {
             commands::connect_mastodon,
             commands::remove_account,
             commands::storage_health,
+            browser_cache::clear_browser_cache,
+            browser_cache::get_browser_cache_size,
+            commands::external::open_external_url,
             oauth::commands::connect_mastodon_oauth,
             oauth::commands::connect_bluesky_oauth,
             oauth::commands::cancel_oauth_login,

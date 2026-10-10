@@ -1,5 +1,6 @@
 import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { openExternalUrl } from "../../services/desktop/external";
 import "./external-links.css";
 
 const WARNING_PREFERENCE = "threadline:external-link-warning";
@@ -9,7 +10,7 @@ const LINK_OR_TAG = /https?:\/\/[^\s<>"']+|#[\p{L}\p{N}_]+/giu;
 function httpUrl(value: string): URL | null {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+    return (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password ? url : null;
   } catch {
     return null;
   }
@@ -55,6 +56,9 @@ export function ExternalLink({ href, children, className, ariaLabel }: ExternalL
   const url = httpUrl(href);
   const [confirming, setConfirming] = useState(false);
   const [remember, setRemember] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const openingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -66,11 +70,33 @@ export function ExternalLink({ href, children, className, ariaLabel }: ExternalL
 
   if (!url) return <span className={className}>{children}</span>;
 
+  const openInBrowser = async () => {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpening(true);
+    setError(null);
+    try {
+      await openExternalUrl(url.href);
+      if (remember) setWarningEnabled(false);
+      setConfirming(false);
+    } catch (cause) {
+      setError(`Could not open this link: ${cause instanceof Error ? cause.message : String(cause)}`);
+      setConfirming(true);
+    } finally {
+      openingRef.current = false;
+      setOpening(false);
+    }
+  };
+
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     event.stopPropagation();
-    if (!warningEnabled()) return;
+    if (!warningEnabled()) {
+      if ("__TAURI_INTERNALS__" in window) { event.preventDefault(); void openInBrowser(); }
+      return;
+    }
     event.preventDefault();
     setRemember(false);
+    setError(null);
     setConfirming(true);
   };
 
@@ -80,10 +106,15 @@ export function ExternalLink({ href, children, className, ariaLabel }: ExternalL
       <h2 id="external-link-title">Open an external link?</h2>
       <p>This link leaves Threadline and opens <strong>{url.hostname}</strong> in your browser.</p>
       <p className="external-link-destination">{url.href}</p>
+      {error && <p role="alert">{error}</p>}
       <label className="external-link-remember"><input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} /> Don’t warn me again</label>
       <div className="external-link-actions">
         <button type="button" className="button" onClick={() => setConfirming(false)}>Cancel</button>
-        <a className="button button-blue" href={url.href} target="_blank" rel="noopener noreferrer" onClick={event => { event.stopPropagation(); if (remember) setWarningEnabled(false); setConfirming(false); }}>Continue</a>
+        <a className="button button-blue" href={url.href} target="_blank" rel="noopener noreferrer" aria-disabled={opening} onClick={event => {
+          event.stopPropagation();
+          if ("__TAURI_INTERNALS__" in window) { event.preventDefault(); void openInBrowser(); }
+          else { if (remember) setWarningEnabled(false); setConfirming(false); }
+        }}>{opening ? "Opening…" : "Continue"}</a>
       </div>
     </dialog>, document.body)}
   </>;

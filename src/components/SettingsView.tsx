@@ -2,6 +2,7 @@ import { Info, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { POST_CACHE_LIMITS, type PostCacheLimit } from "../services/desktop/post-cache-settings";
 import { getPostCacheLimit, setPostCacheLimit } from "../services/desktop/social";
+import { BrowserCacheSetting } from "./BrowserCacheSetting";
 import { ExternalLinkWarningSetting } from "./unified/ExternalLinks";
 import { ViewHeader } from "./unified/ViewHeader";
 
@@ -38,11 +39,12 @@ export function SettingsView() {
         <p className="settings-help">This limits cached provider responses. Posts already displayed in an open view remain visible while you browse.</p>
         {error && <p className="inline-error" role="alert">{error}</p>}
       </section>
+      <BrowserCacheSetting />
       <section className="panel settings-panel" aria-labelledby="settings-links-heading">
         <div className="settings-panel-heading"><h2 id="settings-links-heading">External links</h2><p>Choose whether Threadline asks before opening a link in your browser.</p></div>
         <ExternalLinkWarningSetting />
       </section>
-      <div className="notice settings-privacy-note" role="note"><Info size={18} aria-hidden="true" /><p><strong>Privacy FYI</strong> Fetched posts use a memory-only read cache. Threadline does not save that cache to disk, to limit stored browsing data. Drafts and publishing history are stored separately.</p></div>
+      <div className="notice settings-privacy-note" role="note"><Info size={18} aria-hidden="true" /><p><strong>Privacy FYI</strong> Fetched posts use a memory-only read cache. The embedded browser may cache web resources on disk. Drafts and publishing history are stored separately.</p></div>
     </div>
   </div>;
 }

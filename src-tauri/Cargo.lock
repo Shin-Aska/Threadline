@@ -4392,7 +4392,7 @@ dependencies = [
 
 [[package]]
 name = "threadline"
-version = "0.1.2"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "atrium-api",
@@ -4401,9 +4401,13 @@ dependencies = [
  "atrium-oauth",
  "atrium-xrpc",
  "base64 0.22.1",
+ "block2",
  "dom_query",
  "jiff",
  "keyring",
+ "objc2",
+ "objc2-foundation",
+ "objc2-web-kit",
  "rand 0.8.8",
  "regex",
  "reqwest 0.12.28",
@@ -4421,6 +4425,9 @@ dependencies = [
  "url",
  "uuid",
  "webbrowser",
+ "webkit2gtk",
+ "webview2-com",
+ "windows-core 0.61.2",
 ]
 
 [[package]]

@@ -141,10 +141,26 @@ impl MastodonProvider {
             request = request.query(&[("max_id", cursor)]);
         }
         let values: Vec<native::Notification> = self.social_get(request, "notifications").await?;
+        let markers: native::TimelineMarkers = self
+            .social_get(
+                self.client
+                    .get(format!("{}/api/v1/markers", self.base_url))
+                    .query(&[("timeline[]", "notifications")]),
+                "notification read marker",
+            )
+            .await?;
         let cursor = values.last().map(|value| value.id.clone());
         let notifications = values
             .into_iter()
             .map(|value| {
+                let unread = markers.notifications.as_ref().is_none_or(|marker| {
+                    value
+                        .id
+                        .len()
+                        .cmp(&marker.last_read_id.len())
+                        .then_with(|| value.id.cmp(&marker.last_read_id))
+                        .is_gt()
+                });
                 let kind = match value.notification_type.as_str() {
                     "mention" => NotificationKind::Mention,
                     "favourite" => NotificationKind::Like,
@@ -162,7 +178,7 @@ impl MastodonProvider {
                         .status
                         .map(|status| normalize::post(&self.base_url, status))
                         .transpose()?,
-                    unread: true,
+                    unread,
                 })
             })
             .collect::<Result<Vec<_>, AppError>>()?;
@@ -202,3 +218,7 @@ fn next_max_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+#[path = "../mastodon_notification_tests.rs"]
+mod tests;

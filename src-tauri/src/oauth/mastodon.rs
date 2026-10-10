@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 const CALLBACK_PATH: &str = "/oauth/callback";
-const SCOPES: &str = "read:accounts write:statuses write:media";
+const SCOPES: &str = "read:accounts read:statuses read:notifications write:statuses write:media";
 
 #[derive(Debug, Clone)]
 /// Input and callback deadline for a Mastodon browser login.

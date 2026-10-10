@@ -13,6 +13,8 @@ pub enum AppError {
     Conflict(String),
     #[error("storage error: {0}")]
     Storage(String),
+    #[error("browser launch failed: {0}")]
+    Browser(String),
     #[error("provider error: {0}")]
     Provider(String),
     #[error("account not found: {0}")]

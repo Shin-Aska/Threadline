@@ -5,7 +5,7 @@ export interface DesktopApi {
   workspace: { load(): Promise<WorkspaceState> };
   accounts: { list(): Promise<Account[]>; connectBluesky(serviceUrl: string, identifier: string, appPassword: string): Promise<Account>; connectMastodon(baseUrl: string, accessToken: string): Promise<Account>; remove(accountId: string): Promise<void> };
   social: { hashtags(accountId: string, query: string): Promise<HashtagSuggestion[]>; timeline(accountId: string, cursor?: string | null, signal?: AbortSignal): Promise<UnifiedFeedPage>; discovery(accountId: string, signal?: AbortSignal): Promise<UnifiedDiscoveryResult>; following(accountId: string, signal?: AbortSignal): Promise<UnifiedSource[]>; preview(post: CanonicalPost): Promise<PublishingPreview>; publish(post: CanonicalPost): Promise<PublishResult> };
-  storage: { health(): Promise<string> };
+  storage: { health(): Promise<string>; browserCacheSize(): Promise<number | null>; clearBrowserCache(): Promise<void> };
   notifications: { list(): Promise<readonly never[]> };
 }
 const runningInTauri = (): boolean => "__TAURI_INTERNALS__" in window;
@@ -29,6 +29,10 @@ export const desktopApi: DesktopApi = {
     following: (accountId, signal) => { void signal; return runningInTauri() ? invoke("get_following_sources", { accountId }) : Promise.reject(unavailable()); },
     preview: (post) => runningInTauri() ? invoke("preview_post", { post: { ...post, media: post.media.map(image => ({ ...image, dataBase64: "" })) } }) : Promise.reject(unavailable()), publish: (post) => runningInTauri() ? invoke("publish_post", { post }) : Promise.reject(unavailable())
   },
-  storage: { health: () => runningInTauri() ? invoke("storage_health") : Promise.resolve("browser preview") },
+  storage: {
+    health: () => runningInTauri() ? invoke("storage_health") : Promise.resolve("browser preview"),
+    browserCacheSize: () => runningInTauri() ? invoke<number | null>("get_browser_cache_size") : Promise.resolve(null),
+    clearBrowserCache: () => runningInTauri() ? invoke<void>("clear_browser_cache") : Promise.reject(new Error("Browser cache can only be cleared in Threadline desktop.")),
+  },
   notifications: { list: () => Promise.resolve([]) }
 };

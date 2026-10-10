@@ -83,6 +83,9 @@ test("Following paginates source collections and their feeds", async ({ page }) 
 
 test("Notifications deduplicate paginated activity and preserve read state", async ({ page }) => {
   await page.goto("/tests/fixtures/complete-workspace.html");
+  const navigation = page.getByRole("button", { name: "Notifications", exact: true });
+  await expect(navigation.locator(".connected-count")).toHaveText("2");
+  await expect(navigation).toHaveAccessibleDescription("2 unread notifications");
   await page.getByRole("button", { name: "Notifications", exact: true }).click();
   await expect(page.locator(".notification-row")).toHaveCount(3);
   await expect(page.locator(".notification-row").filter({ hasText: "Clara Chen" })).toContainText("Content warning: Story spoilers");
@@ -92,8 +95,13 @@ test("Notifications deduplicate paginated activity and preserve read state", asy
   await expect(page.getByText(/Updated Jules Park/)).toBeVisible();
   await expect(page.getByText(/Updated Clara Chen/)).toBeVisible();
   await expect(page.locator(".notification-row.unread").filter({ hasText: "Updated" })).toHaveCount(0);
+  await expect(navigation.locator(".connected-count")).toHaveText("2");
   await page.getByRole("button", { name: "Mark all read" }).click();
   await expect(page.locator(".notification-row.unread")).toHaveCount(0);
+  await expect(navigation.locator(".connected-count")).toHaveCount(0);
+  await expect(navigation).toHaveAccessibleDescription("0 unread notifications");
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  await expect(navigation.locator(".connected-count")).toHaveCount(0);
 });
 
 test("approved fixture validates, previews, and restores an MP4 draft", async ({ page }) => {

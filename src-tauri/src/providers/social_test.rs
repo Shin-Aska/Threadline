@@ -330,7 +330,7 @@ async fn mastodon_following_uses_link_cursor_instead_of_account_id() {
 async fn mastodon_notifications_preserve_remote_inbox_items() {
     // Given one native notification returned by the remote inbox.
     let notifications = r#"[{"id":"11","type":"mention","created_at":"2026-09-20T01:00:00Z","account":{"id":"8","acct":"alice","display_name":"Alice"},"status":null}]"#;
-    let (url, server) = super::test_http::server(vec![(200, notifications)]);
+    let (url, server) = super::test_http::server(vec![(200, notifications), (200, "{}")]);
     let provider = mastodon(url);
 
     // When notifications are loaded from the selected account.
@@ -342,7 +342,7 @@ async fn mastodon_notifications_preserve_remote_inbox_items() {
         page.notifications[0].kind,
         super::social::NotificationKind::Mention
     ));
-    assert_eq!(server.join().expect("server").len(), 1);
+    assert_eq!(server.join().expect("server").len(), 2);
 }
 
 #[tokio::test]
