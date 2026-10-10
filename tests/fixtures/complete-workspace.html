@@ -58,6 +58,7 @@ Object.defineProperty(window,"__TAURI_INTERNALS__",{value:{invoke:async(command,
   if(command==="list_schedules")return schedules;
   if(["reschedule_publication","cancel_schedule","send_schedule_now"].includes(command)){const input=args.input;const current=schedules.find(s=>s.id===input.id);let result=current.result;if(command==="send_schedule_now"){result={id:"publication-"+nextId++,draftId:current.draftId,draftRevision:current.draftRevision,post:current.post,createdAtEpochMs:Date.now(),completedAtEpochMs:Date.now(),destinations:current.post.destinationAccountIds.map(id=>({accountId:id,status:"PUBLISHED",remotePostIds:["scheduled-qa"],error:null,segments:[{index:0,status:"PUBLISHED",remotePostId:"scheduled-qa",error:null}]}))};publications=[result,...publications];}const value={...current,revision:current.revision+1,status:command==="cancel_schedule"?"CANCELLED":command==="send_schedule_now"?"COMPLETED":"QUEUED",scheduledForEpochMs:input.scheduledForEpochMs||current.scheduledForEpochMs,timeZone:input.timeZone||current.timeZone,result,updatedAtEpochMs:Date.now()};schedules=schedules.map(s=>s.id===value.id?value:s);return value;}
   if(command==="storage_health")return "qa fixture";
+  if(command==="get_browser_cache_size")return 26214400;
   throw new Error("QA bridge missing command: "+command);
 }}});
 </script><script type="module" src="/src/main.tsx"></script></body>

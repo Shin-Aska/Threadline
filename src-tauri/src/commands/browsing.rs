@@ -183,7 +183,7 @@ pub async fn get_notifications(
     if matches!(account.provider, crate::models::ProviderKind::Mastodon) {
         let read_ids = state.database.notification_read_ids(&account_id)?;
         for notification in &mut page.notifications {
-            notification.unread = !read_ids.contains(&notification.id);
+            notification.unread &= !read_ids.contains(&notification.id);
         }
     }
     Ok(page)

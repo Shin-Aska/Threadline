@@ -95,6 +95,18 @@ pub(super) struct Notification {
     pub status: Option<Status>,
 }
 
+// Timeline marker, used to keep track of the last read status in a timeline.
+#[derive(Deserialize)]
+pub(super) struct TimelineMarker {
+    pub last_read_id: String,
+}
+
+// Timeline markers, used to keep track of the last read status in a timeline.
+#[derive(Deserialize)]
+pub(super) struct TimelineMarkers {
+    pub notifications: Option<TimelineMarker>,
+}
+
 /// One trend interval's usage count, encoded as a string by Mastodon.
 #[derive(Deserialize)]
 pub(super) struct TrendHistory {
