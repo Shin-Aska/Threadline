@@ -234,12 +234,10 @@ impl BlueskyProvider {
         if ids.is_empty() {
             return Ok(());
         }
-        let _: serde_json::Value = self
-            .post_json(
-                "app.bsky.notification.updateSeen",
-                serde_json::json!({"seenAt": crate::providers::now_iso8601()}),
-            )
-            .await?;
-        Ok(())
+        self.post_empty(
+            "app.bsky.notification.updateSeen",
+            serde_json::json!({"seenAt": crate::providers::now_iso8601()}),
+        )
+        .await
     }
 }

@@ -23,6 +23,29 @@ fn bluesky(service_url: String) -> BlueskyProvider {
     }
 }
 
+#[tokio::test]
+async fn mark_read_accepts_empty_success_response() {
+    // Given updateSeen returns success without a JSON response body.
+    let session = r#"{"accessJwt":"jwt","did":"did:plc:alice","handle":"alice.test"}"#;
+    for status in [200, 204] {
+        let (url, server) = super::test_http::server(vec![(200, session), (status, "")]);
+        let provider = bluesky(url);
+
+        // When the account marks its notifications read.
+        let result = provider.mark_notifications_read(&["notice".into()]).await;
+
+        // Then an empty successful response is accepted and the seen timestamp was sent.
+        let requests = server.join().expect("server");
+        result.expect("empty updateSeen response is successful");
+        assert!(requests[1]
+            .headers
+            .contains("/xrpc/app.bsky.notification.updateSeen"));
+        let body: serde_json::Value =
+            serde_json::from_slice(&requests[1].body).expect("request JSON");
+        assert!(body["seenAt"].as_str().is_some());
+    }
+}
+
 fn actor_json() -> serde_json::Value {
     serde_json::json!({"did":"did:plc:actor","handle":"actor.test","displayName":"Actor"})
 }

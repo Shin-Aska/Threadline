@@ -265,6 +265,27 @@ impl BlueskyProvider {
         if let Some(oauth) = &self.oauth {
             return oauth.post_json(path, &body).await.map_err(oauth_error);
         }
+        response_json(self.post_response(path, body).await?).await
+    }
+
+    /// Sends a JSON XRPC request whose successful response has no output schema.
+    pub(super) async fn post_empty(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<(), AppError> {
+        if let Some(oauth) = &self.oauth {
+            return oauth.post_empty(path, &body).await.map_err(oauth_error);
+        }
+        response_body(self.post_response(path, body).await?).await?;
+        Ok(())
+    }
+
+    async fn post_response(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<reqwest::Response, AppError> {
         let session = self.session().await?;
         let access_jwt = session.access_jwt;
         let response = self
@@ -282,7 +303,7 @@ impl BlueskyProvider {
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             self.invalidate_session(&access_jwt).await;
         }
-        response_json(response).await
+        Ok(response)
     }
 
     /// Uploads a binary XRPC body with its media type and configured auth flow.
@@ -476,6 +497,12 @@ fn oauth_error(error: crate::oauth::OAuthError) -> AppError {
 async fn response_json<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
 ) -> Result<T, AppError> {
+    let body = response_body(response).await?;
+    serde_json::from_str(&body)
+        .map_err(|error| AppError::Provider(format!("Invalid Bluesky response: {error}")))
+}
+
+async fn response_body(response: reqwest::Response) -> Result<String, AppError> {
     let status = response.status();
     let body = response.text().await.map_err(|error| {
         AppError::Provider(format!("Bluesky response could not be read: {error}"))
@@ -486,8 +513,7 @@ async fn response_json<T: serde::de::DeserializeOwned>(
             crate::providers::safe_error_body(&body)
         )));
     }
-    serde_json::from_str(&body)
-        .map_err(|error| AppError::Provider(format!("Invalid Bluesky response: {error}")))
+    Ok(body)
 }
 #[async_trait]
 impl SocialProvider for BlueskyProvider {

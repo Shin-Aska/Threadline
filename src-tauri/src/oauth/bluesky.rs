@@ -370,6 +370,21 @@ impl BlueskyOAuthRuntime {
         .await
     }
 
+    /// Sends an authenticated JSON POST whose success response has no output schema.
+    pub async fn post_empty(&self, path: &str, body: &serde_json::Value) -> Result<(), OAuthError> {
+        let bytes = serde_json::to_vec(body)
+            .map_err(|error| OAuthError::InvalidResponse(error.to_string()))?;
+        self.request(
+            atrium_xrpc::http::Method::POST,
+            path,
+            &[],
+            bytes,
+            Some("application/json"),
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn request_json<T: serde::de::DeserializeOwned>(
         &self,
         method: atrium_xrpc::http::Method,
@@ -378,6 +393,21 @@ impl BlueskyOAuthRuntime {
         body: Vec<u8>,
         content_type: Option<&str>,
     ) -> Result<T, OAuthError> {
+        let response = self
+            .request(method, path, query, body, content_type)
+            .await?;
+        serde_json::from_slice(&response)
+            .map_err(|_| OAuthError::InvalidResponse("Bluesky returned invalid JSON".into()))
+    }
+
+    async fn request(
+        &self,
+        method: atrium_xrpc::http::Method,
+        path: &str,
+        query: &[(&str, &str)],
+        body: Vec<u8>,
+        content_type: Option<&str>,
+    ) -> Result<Vec<u8>, OAuthError> {
         let mut url = Url::parse(&self.session.base_uri())
             .and_then(|base| base.join(&format!("xrpc/{path}")))
             .map_err(|_| OAuthError::Configuration("Bluesky PDS URL is invalid".into()))?;
@@ -400,8 +430,7 @@ impl BlueskyOAuthRuntime {
                 response.status()
             )));
         }
-        serde_json::from_slice(response.body())
-            .map_err(|_| OAuthError::InvalidResponse("Bluesky returned invalid JSON".into()))
+        Ok(response.into_body())
     }
 
     async fn persist_session(&self) -> Result<(), OAuthError> {
