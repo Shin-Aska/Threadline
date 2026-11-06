@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false && tsc -p tests/tsconfig.json --pretty false",
     "lint": "eslint . --max-warnings 0",
+    "audit:security": "npm audit --audit-level=low",
     "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "tauri dev",
     "test:ui": "npm run build && playwright test"
