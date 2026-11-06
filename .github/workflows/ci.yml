@@ -10,6 +10,10 @@ permissions:
   contents: read
 
 jobs:
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+
   checks:
     name: Checks
     runs-on: ubuntu-22.04
@@ -39,9 +43,9 @@ jobs:
           npm run test:ui
       - name: Rust checks
         run: |
-          cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml --check
-          cargo +1.98.1 clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-          cargo +1.98.1 test --locked --manifest-path src-tauri/Cargo.toml --all-targets
+          cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml --all --check
+          cargo +1.98.1 clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --no-default-features -- -D warnings
+          cargo +1.98.1 test --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --no-default-features
 
   appimage-smoke:
     name: AppImage smoke (${{ matrix.os }})

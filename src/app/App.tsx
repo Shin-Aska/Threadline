@@ -36,7 +36,7 @@ export function App() {
     {workspaceError}
     {navigation.detail && <SocialDetailView target={navigation.detail} workspace={workspace} onBack={navigation.back} onPost={openPost} onProfile={openProfile} onTag={openTag} />}
     <div hidden={navigation.detail !== null || navigation.page !== "notifications"}><NotificationsView key={[...workspace.connectedAccountIds].sort().join("\0")} workspace={workspace} onUnreadCount={setUnreadNotificationCount} onPost={openPost} onProfile={openProfile} /></div>
-    {visited.has("myprofiles") && <div hidden={navigation.detail !== null || navigation.page !== "myprofiles"}><MyProfilesView {...pageProps} accountId={navigation.profileAccountId} onAccount={navigation.selectProfileAccount} onAccounts={() => navigation.navigate("accounts")} /></div>}
+    {visited.has("myprofiles") && <div hidden={navigation.detail !== null || navigation.page !== "myprofiles"}><MyProfilesView {...pageProps} active={navigation.detail === null && navigation.page === "myprofiles"} accountId={navigation.profileAccountId} onAccount={navigation.selectProfileAccount} onAccounts={() => navigation.navigate("accounts")} /></div>}
     {visited.has("timeline") && <div hidden={navigation.detail !== null || navigation.page !== "timeline"}><TimelineView {...pageProps} /></div>}
     {visited.has("discover") && <div hidden={navigation.detail !== null || navigation.page !== "discover"}><DiscoverView {...pageProps} /></div>}
     {visited.has("following") && <div hidden={navigation.detail !== null || navigation.page !== "following"}><FollowingView {...pageProps} onSource={(accountId, source) => navigation.openDetail({ kind: "SOURCE", accountId, source, origin: "Following" })} /></div>}

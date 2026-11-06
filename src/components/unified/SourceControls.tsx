@@ -1,10 +1,10 @@
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, RotateCw } from "lucide-react";
 import { useState } from "react";
 import type { Account, Provider } from "../../types";
 import { ProviderIcon } from "../ui";
 
-/** Filters a unified view by account or selects all accounts from one provider. */
-export function SourceControls({ accounts, selected, onToggle, onSelectProvider }: { accounts: readonly Account[]; selected: readonly string[]; onToggle: (id: string) => void; onSelectProvider: (provider: Provider | "ALL") => void }) {
+/** Selects a view's account scope and refreshes its provider data. */
+export function SourceControls({ accounts, selected, onToggle, onSelectProvider, onRefresh, refreshing, refreshLabel }: { accounts: readonly Account[]; selected: readonly string[]; onToggle: (id: string) => void; onSelectProvider: (provider: Provider | "ALL") => void; onRefresh: () => void; refreshing: boolean; refreshLabel: string }) {
   const [open, setOpen] = useState<Provider | null>(null);
   const count = (provider: Provider) => accounts.filter(account => account.provider === provider && selected.includes(account.id)).length;
   return <div className="source-controls" aria-label="Browsing sources">
@@ -13,5 +13,6 @@ export function SourceControls({ accounts, selected, onToggle, onSelectProvider 
       <button className={`source-chip ${count(provider) && count(provider) === selected.length ? "active" : ""}`} aria-expanded={open === provider} onClick={() => setOpen(open === provider ? null : provider)}><ProviderIcon provider={provider} />{provider === "BLUESKY" ? "Bluesky" : "Mastodon"}<span>{count(provider)}</span><ChevronDown size={13} /></button>
       {open === provider && <div className="source-menu">{accounts.filter(account => account.provider === provider).map(account => <button key={account.id} onClick={() => onToggle(account.id)}><span className="mini-avatar">{account.displayName[0]}</span><span><strong>{account.displayName}</strong><small>{account.handle}</small></span>{selected.includes(account.id) && <Check size={14} />}</button>)}<button onClick={() => { onSelectProvider(provider); setOpen(null); }}>Only {provider === "BLUESKY" ? "Bluesky" : "Mastodon"}</button></div>}
     </div>)}
+    <button className="button" aria-label={refreshLabel} aria-busy={refreshing} disabled={refreshing} onClick={onRefresh}><RotateCw size={16} />{refreshing ? "Refreshing…" : "Refresh"}</button>
   </div>;
 }

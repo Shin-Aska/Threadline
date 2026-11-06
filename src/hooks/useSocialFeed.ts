@@ -33,7 +33,7 @@ function load(accountId: string, source: SocialFeedSource, cursor: string | null
 }
 
 /** Aggregates provider feeds while rejecting superseded requests and paginating per account. */
-export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSource) {
+export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSource, { active = true, refreshOnActivate = false }: { readonly active?: boolean; readonly refreshOnActivate?: boolean } = {}) {
   const [pages, setPages] = useState<Readonly<Record<string, FeedPage>>>({});
   const [failures, setFailures] = useState<readonly SocialFeedFailure[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +62,7 @@ export function useSocialFeed(accounts: readonly Account[], source: SocialFeedSo
     setLoading(false);
     inFlight.current = false;
   }, []);
-  useEffect(() => { void accountKey; void sourceKey; void refresh(false); return () => { revision.current += 1; inFlight.current = false; }; }, [accountKey, refresh, sourceKey]);
+  useEffect(() => { void accountKey; void sourceKey; if (active) void refresh(refreshOnActivate); return () => { revision.current += 1; inFlight.current = false; }; }, [accountKey, active, refresh, refreshOnActivate, sourceKey]);
   const more = useCallback(async () => {
     if (inFlight.current) return;
     const targets = accountsRef.current.filter(account => pages[account.id]?.cursor);

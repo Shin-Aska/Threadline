@@ -3,6 +3,13 @@ name = "threadline"
 version = "1.0.1"
 edition = "2021"
 
+[workspace]
+members = ["vendor/atrium-oauth"]
+resolver = "2"
+
+[patch.crates-io]
+atrium-oauth = { path = "vendor/atrium-oauth" }
+
 [lib]
 name = "threadline_lib"
 crate-type = ["lib", "cdylib", "staticlib"]

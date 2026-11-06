@@ -1,4 +1,4 @@
-import { Bell, Heart, MessageCircle, Repeat2, Users } from "lucide-react";
+import { Bell, Heart, MessageCircle, Repeat2, RotateCw, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAdaptiveRailExpansion } from "../hooks/useAdaptiveRailExpansion";
 import { socialApi } from "../services/desktop/social";
@@ -45,6 +45,8 @@ export function NotificationsView({ workspace, onUnreadCount, onPost, onProfile 
   const railRef = useRef<HTMLDivElement>(null);
   const feedExpanded = useAdaptiveRailExpansion(railRef);
   const [loading, setLoading] = useState(true);
+  const [marking, setMarking] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const pendingRefresh = useRef<{ readonly quiet: boolean; readonly force: boolean } | null>(null);
@@ -65,9 +67,18 @@ export function NotificationsView({ workspace, onUnreadCount, onPost, onProfile 
     const delay = Math.min(POLL_INTERVAL_MS * 2 ** failureCount.current, MAX_POLL_INTERVAL_MS);
     timer.current = window.setTimeout(() => void refreshRef.current(true, true), delay);
   }, [clearTimer, accounts.length]);
+  const finishRequest = useCallback(async () => {
+    inFlight.current = false;
+    setBusy(false);
+    const pending = pendingRefresh.current;
+    pendingRefresh.current = null;
+    if (pending && visibleRef.current) await refreshRef.current(pending.quiet, pending.force);
+    else schedule();
+  }, [schedule]);
   const refresh = useCallback(async (quiet = false, force = false) => {
-    if (inFlight.current) { pendingRefresh.current = { quiet, force }; return; }
+    if (inFlight.current) { pendingRefresh.current = { quiet: quiet && (pendingRefresh.current?.quiet ?? true), force: force || (pendingRefresh.current?.force ?? false) }; return; }
     inFlight.current = true;
+    setBusy(true);
     clearTimer();
     if (!quiet) setLoading(true);
     setError(null);
@@ -81,12 +92,8 @@ export function NotificationsView({ workspace, onUnreadCount, onPost, onProfile 
     failureCount.current = failures.length > 0 ? failureCount.current + 1 : 0;
     setError(failures.length ? failures.join(" · ") : null);
     setLoading(false);
-    inFlight.current = false;
-    const pending = pendingRefresh.current;
-    pendingRefresh.current = null;
-    if (pending && visibleRef.current) await refreshRef.current(pending.quiet, pending.force);
-    else schedule();
-  }, [clearTimer, schedule, accounts]);
+    await finishRequest();
+  }, [clearTimer, finishRequest, accounts]);
   refreshRef.current = refresh;
   useEffect(() => {
     mountedRef.current = true;
@@ -115,26 +122,40 @@ export function NotificationsView({ workspace, onUnreadCount, onPost, onProfile 
   useEffect(() => { onUnreadCount(unreadCount); }, [onUnreadCount, unreadCount]);
   const visible = notifications.filter(({ item }) => filter === "ALL" || filter === "MENTIONS" && ["MENTION", "REPLY", "QUOTE"].includes(item.kind) || filter === "INTERACTIONS" && ["LIKE", "REPOST", "FOLLOW"].includes(item.kind));
   const markRead = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    clearTimer();
+    setMarking(true);
     setError(null);
-    try {
-      await Promise.all(Object.entries(pages).map(async ([accountId, page]) => {
-        const ids = page.notifications.filter(item => item.unread).map(item => item.id);
-        if (ids.length === 0) return;
+    const failures = await Promise.all(Object.entries(pages).map(async ([accountId, page]) => {
+      const ids = page.notifications.filter(item => item.unread).map(item => item.id);
+      if (ids.length === 0) return null;
+      try {
         await socialApi.markNotificationsRead(accountId, ids);
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return null;
         setPages(current => {
           const currentPage = current[accountId];
           if (!currentPage) return current;
           return { ...current, [accountId]: { ...currentPage, notifications: currentPage.notifications.map(item => ids.includes(item.id) ? { ...item, unread: false } : item) } };
         });
-      }));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+        return null;
+      } catch (cause) {
+        return `${accounts.find(account => account.id === accountId)?.displayName ?? accountId}: ${cause instanceof Error ? cause.message : String(cause)}`;
+      }
+    }));
+    if (!mountedRef.current) return;
+    const errors = failures.filter((failure): failure is string => failure !== null);
+    setError(errors.length ? errors.join(" · ") : null);
+    setMarking(false);
+    await finishRequest();
   };
   const more = async () => {
     if (inFlight.current) return;
     const targets = accounts.filter(account => pages[account.id]?.cursor);
     if (targets.length === 0) return;
     inFlight.current = true;
+    setBusy(true);
     clearTimer();
     setLoading(true); setError(null);
     const results = await Promise.all(targets.map(async account => {
@@ -150,8 +171,7 @@ export function NotificationsView({ workspace, onUnreadCount, onPost, onProfile 
     const failures = results.filter(result => result.error).map(result => `${workspace.accounts.find(account => account.id === result.accountId)?.displayName ?? result.accountId}: ${result.error}`);
     setError(failures.length ? failures.join(" · ") : null);
     setLoading(false);
-    inFlight.current = false;
-    schedule();
+    await finishRequest();
   };
-  return <div className="unified-page"><ViewHeader icon={<Bell />} title="Notifications" subtitle="Activity for your connected accounts." controls={<button className="button" disabled={!notifications.some(item => item.item.unread)} onClick={() => void markRead()}>Mark all read</button>} /><div className={`unified-layout adaptive-layout ${feedExpanded ? "adaptive-expanded" : ""}`}><section className="panel notification-panel adaptive-main"><div className="tabs">{(["ALL", "MENTIONS", "INTERACTIONS"] as const).map(value => <button className={`button ${filter === value ? "selected" : ""}`} key={value} onClick={() => setFilter(value)}>{value === "ALL" ? "All" : value === "MENTIONS" ? "Mentions" : "Interactions"}</button>)}</div>{error && <Notice error>{error}</Notice>}{loading && notifications.length === 0 && <div className="post-skeletons" aria-label="Loading notifications"><i /><i /></div>}{visible.map(({ accountId, item }) => { const account = workspace.accounts.find(account => account.id === accountId); return <button className={`notification-row click-row ${item.unread ? "unread" : ""}`} key={`${accountId}:${item.id}`} onClick={() => item.post ? onPost(accountId, item.post.remoteId) : onProfile(accountId, item.actor.id)}>{icon(item.kind)}<div><strong>{item.actor.displayName} · {item.kind.toLocaleLowerCase()}</strong>{item.post && <p>{item.post.contentWarning?.trim() ? "Content warning: " + item.post.contentWarning : item.post.text}</p>}<small className="muted">Via {account?.displayName ?? accountId} · {account && <><ProviderIcon provider={account.provider} /> {account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} · </>}<time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></small></div>{item.unread && <span className="unread-dot" aria-label="Unread" />}</button>; })}{!loading && visible.length === 0 && <div className="empty-state"><Bell /><h3>No notifications in this view</h3><p>New provider activity will appear here.</p></div>}{Object.values(pages).some(page => page.cursor) && <button className="button load-more" disabled={loading} onClick={() => void more()}>{loading ? "Loading…" : "Load more"}</button>}</section><aside inert={feedExpanded} className="details-column adaptive-rail"><div ref={railRef} className="adaptive-rail-content"><section className="panel"><h2>Notification scope</h2><p className="aside-copy section-space">Activity is grouped from all connected accounts. Opening an item keeps the receiving account as the action identity.</p>{workspace.accounts.map(account => <div className="actor-row" key={account.id}><ProviderIcon provider={account.provider} /><span><strong>{account.displayName}</strong><small>@{account.handle}</small></span></div>)}</section></div></aside></div></div>;
+  return <div className="unified-page"><ViewHeader icon={<Bell />} title="Notifications" subtitle="Activity for your connected accounts." controls={<div className="tabs profile-scope"><button className="button" disabled={busy} aria-label="Refresh notifications" aria-busy={busy} onClick={() => void refresh(false, true)}><RotateCw size={16} />{loading ? "Refreshing…" : "Refresh"}</button><button className="button" disabled={busy || unreadCount === 0} aria-busy={marking} onClick={() => void markRead()}>{marking ? "Marking read…" : "Mark all read"}</button></div>} /><div className={`unified-layout adaptive-layout ${feedExpanded ? "adaptive-expanded" : ""}`}><section className="panel notification-panel adaptive-main"><div className="tabs">{(["ALL", "MENTIONS", "INTERACTIONS"] as const).map(value => <button className={`button ${filter === value ? "selected" : ""}`} key={value} onClick={() => setFilter(value)}>{value === "ALL" ? "All" : value === "MENTIONS" ? "Mentions" : "Interactions"}</button>)}</div>{error && <Notice error>{error}</Notice>}{loading && notifications.length === 0 && <div className="post-skeletons" aria-label="Loading notifications"><i /><i /></div>}{visible.map(({ accountId, item }) => { const account = workspace.accounts.find(account => account.id === accountId); return <button className={`notification-row click-row ${item.unread ? "unread" : ""}`} key={`${accountId}:${item.id}`} onClick={() => item.post ? onPost(accountId, item.post.remoteId) : onProfile(accountId, item.actor.id)}>{icon(item.kind)}<div><strong>{item.actor.displayName} · {item.kind.toLocaleLowerCase()}</strong>{item.post && <p>{item.post.contentWarning?.trim() ? "Content warning: " + item.post.contentWarning : item.post.text}</p>}<small className="muted">Via {account?.displayName ?? accountId} · {account && <><ProviderIcon provider={account.provider} /> {account.provider === "BLUESKY" ? "Bluesky" : "Mastodon"} · </>}<time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></small></div>{item.unread && <span className="unread-dot" aria-label="Unread" />}</button>; })}{!loading && visible.length === 0 && <div className="empty-state"><Bell /><h3>No notifications in this view</h3><p>New provider activity will appear here.</p></div>}{Object.values(pages).some(page => page.cursor) && <button className="button load-more" disabled={busy} onClick={() => void more()}>{loading ? "Loading…" : "Load more"}</button>}</section><aside inert={feedExpanded} className="details-column adaptive-rail"><div ref={railRef} className="adaptive-rail-content"><section className="panel"><h2>Notification scope</h2><p className="aside-copy section-space">Activity is grouped from all connected accounts. Opening an item keeps the receiving account as the action identity.</p>{workspace.accounts.map(account => <div className="actor-row" key={account.id}><ProviderIcon provider={account.provider} /><span><strong>{account.displayName}</strong><small>@{account.handle}</small></span></div>)}</section></div></aside></div></div>;
 }
