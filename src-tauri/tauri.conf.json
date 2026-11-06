@@ -4,7 +4,39 @@
   "version": "1.0.1",
   "identifier": "social.threadline.app",
   "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "beforeBundleCommand": "node scripts/prepare-appimage.mjs", "frontendDist": "../dist" },
-  "app": { "windows": [{ "title": "Threadline", "width": 1180, "height": 780, "minWidth": 760, "minHeight": 600 }], "security": { "csp": null } },
+  "app": {
+    "windows": [{ "title": "Threadline", "width": 1180, "height": 780, "minWidth": 760, "minHeight": 600 }],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self'",
+        "img-src": "'self' https: data: blob:",
+        "media-src": "'self' https: data: blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost https:",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self'",
+        "img-src": "'self' https: data: blob:",
+        "media-src": "'self' https: data: blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost https: http://localhost:1420 http://127.0.0.1:1420 ws://localhost:1420 ws://127.0.0.1:1420",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

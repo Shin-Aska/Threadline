@@ -10,7 +10,7 @@
     "lint": "eslint . --max-warnings 0",
     "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "tauri dev",
-    "test:ui": "playwright test"
+    "test:ui": "npm run build && playwright test"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
