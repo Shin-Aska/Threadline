@@ -39,9 +39,9 @@ jobs:
           npm run test:ui
       - name: Rust checks
         run: |
-          cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml --check
-          cargo +1.98.1 clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-          cargo +1.98.1 test --locked --manifest-path src-tauri/Cargo.toml --all-targets
+          cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml --all --check
+          cargo +1.98.1 clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --no-default-features -- -D warnings
+          cargo +1.98.1 test --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --no-default-features
 
   appimage-smoke:
     name: AppImage smoke (${{ matrix.os }})
